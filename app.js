@@ -848,7 +848,7 @@ document.addEventListener("DOMContentLoaded", () => {
     if (category === "all") {
       renderProducts(NELUM_PRODUCTS);
       renderBundles(NELUM_BUNDLES);
-      showcaseTitle.textContent = "Recommended Gifts";
+      showcaseTitle.textContent = "Popular Gifts";
       showcaseTag.textContent = "General Store";
     } else if (category === "birthday") {
       const filtered = NELUM_PRODUCTS.filter(p => ["cakes", "flowers", "toys"].includes(p.category));
