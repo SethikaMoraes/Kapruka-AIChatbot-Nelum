@@ -2,7 +2,44 @@
 // NELUM BY KAPRUKA - INTERACTIVE APPLICATION CONTROLLER
 // ==========================================================================
 
+import { ConversationManager } from './src/runtime/conversationManager.js';
+import { memoryStore } from './src/memory/memoryStore.js';
+import { intentDetector } from './src/agents/intentDetector.js';
+import { agentOrchestrator } from './src/agents/agentOrchestrator.js';
+import { eventBus } from './src/utils/eventBus.js';
+import { kaprukaClient } from './src/mcp/kaprukaClient.js';
+import { preferenceEngine } from './src/memory/preferenceEngine.js';
+import { habitLearningEngine } from './src/memory/habitLearningEngine.js';
+
 document.addEventListener("DOMContentLoaded", () => {
+  // --- Instantiate Conversation Manager ---
+  const manager = new ConversationManager(memoryStore, intentDetector, agentOrchestrator);
+
+  // Static configurations for Nelum Assistant UI
+  const CONVERSATION_STARTERS = [
+    { icon: "🎂", text: "Birthday Gift", context: "birthday" },
+    { icon: "🌹", text: "Sorry Gift", context: "sorry" },
+    { icon: "💝", text: "Anniversary", context: "anniversary" },
+    { icon: "👩", text: "For Mom", context: "mom" },
+    { icon: "👨", text: "For Dad", context: "dad" },
+    { icon: "🎮", text: "Electronics", context: "electronics" },
+    { icon: "🍫", text: "Chocolates", context: "chocolates" },
+    { icon: "🛒", text: "Groceries", context: "groceries" },
+    { icon: "💐", text: "Flowers", context: "flowers" }
+  ];
+
+  const QUICK_ACTIONS = [
+    { text: "Under Rs.5000", action: "price-5000" },
+    { text: "Under Rs.10000", action: "price-10000" },
+    { text: "Same Day Delivery", action: "delivery-sameday" },
+    { text: "Best Sellers", action: "filter-bestseller" },
+    { text: "Gifts for Wife", action: "context-wife" },
+    { text: "Gifts for Mom", action: "context-mom" }
+  ];
+
+  // Initialize session context
+  manager.processMessage('default-session', 'init_welcome');
+
   // --- State Variables ---
   let cart = [];
   let currentCategory = "all";
@@ -14,8 +51,6 @@ document.addEventListener("DOMContentLoaded", () => {
   // --- DOM Elements ---
   const startersGrid = document.getElementById("starters-grid");
   const quickChipsContainer = document.getElementById("quick-chips");
-  const productGrid = document.getElementById("product-grid");
-  const bundlesCarousel = document.getElementById("bundles-carousel");
   
   const chatHero = document.getElementById("chat-hero");
   const chatMessages = document.getElementById("chat-messages");
@@ -26,9 +61,6 @@ document.addEventListener("DOMContentLoaded", () => {
   const voiceWave = document.getElementById("voice-wave");
   const btnAttach = document.getElementById("btn-attach");
   const typingIndicator = document.getElementById("typing-indicator");
-  
-  const showcaseTitle = document.getElementById("showcase-title");
-  const showcaseTag = document.getElementById("showcase-tag");
   
   // Cart elements
   const btnCartToggle = document.getElementById("btn-cart-toggle");
@@ -84,22 +116,197 @@ document.addEventListener("DOMContentLoaded", () => {
   const navCart = document.getElementById("nav-cart");
   const navOrders = document.getElementById("nav-orders");
 
+  // --- Loading Screen Handler ---
+  function runLoadingScreen(appInitPromise) {
+    const loader = document.getElementById("loading-screen");
+    const video = document.getElementById("loading-video");
+    const fill = document.getElementById("loading-progress-fill");
+    
+    if (!loader) return;
+
+    let progress = 0;
+    let isAppReady = false;
+    let minimumTimeElapsed = false;
+    const startTime = Date.now();
+    const minDuration = 4000; // Minimum 4 seconds
+
+    // Video play/error detection
+    if (video) {
+      video.addEventListener("playing", () => {
+        video.classList.add("video-playing");
+      });
+      
+      video.addEventListener("error", () => {
+        console.warn("Loading video failed to load, falling back to brand gradient.");
+        video.style.display = "none";
+      });
+
+      // Try playing manually in case autoplay needs a push
+      video.play().catch(err => {
+        console.warn("Video autoplay blocked or failed:", err);
+      });
+
+      // Autoplay fallback timer: if not playing in 1.5s, hide video and use gradient
+      setTimeout(() => {
+        if (video.readyState < 3) {
+          console.warn("Video load timeout, falling back to brand gradient.");
+          video.style.display = "none";
+        }
+      }, 1500);
+    }
+
+    // Set up progress bar interval
+    const progressInterval = setInterval(() => {
+      const elapsed = Date.now() - startTime;
+      
+      if (!isAppReady || !minimumTimeElapsed) {
+        const targetProgress = Math.min(90, (elapsed / minDuration) * 90);
+        progress = Math.max(progress, targetProgress);
+      } else {
+        progress += (100 - progress) * 0.2;
+        if (progress >= 99.5) {
+          progress = 100;
+          clearInterval(progressInterval);
+          finishLoading();
+        }
+      }
+      
+      if (fill) {
+        fill.style.width = `${progress}%`;
+        fill.setAttribute("aria-valuenow", Math.round(progress));
+      }
+    }, 50);
+
+    // Timeout for minimum 3 seconds
+    setTimeout(() => {
+      minimumTimeElapsed = true;
+      checkCompletion();
+    }, minDuration);
+
+    appInitPromise.then(() => {
+      isAppReady = true;
+      checkCompletion();
+    }).catch(err => {
+      console.error("App init failed but continuing loading flow:", err);
+      isAppReady = true;
+      checkCompletion();
+    });
+
+    function checkCompletion() {
+      if (minimumTimeElapsed && isAppReady) {
+        // Let the interval code accelerate the bar to 100% and trigger finishLoading
+      }
+    }
+
+    function finishLoading() {
+      loader.classList.add("fade-out");
+      loader.addEventListener("transitionend", (e) => {
+        if (e.propertyName === "opacity") {
+          loader.remove();
+        }
+      });
+      
+      setTimeout(() => {
+        if (loader.parentNode) {
+          loader.remove();
+        }
+      }, 1000);
+    }
+  }
+
   // --- Initializers ---
-  function init() {
-    renderStarters();
+  async function init() {
+    loadRemindersAndRender();
     renderQuickChips();
-    renderProducts(NELUM_PRODUCTS);
-    renderBundles(NELUM_BUNDLES);
+    
     setupEventListeners();
     
     // Set default date in delivery form to tomorrow
     const tomorrow = new Date();
     tomorrow.setDate(tomorrow.getDate() + 1);
     document.getElementById("delivery-date").value = tomorrow.toISOString().split("T")[0];
+    
+    // Subscribe to State transition logging
+    eventBus.subscribe('state_transition', (event) => {
+      console.log(`[EventBus Notification] User transitioned states:`, event);
+    });
+  }
+
+  function generateDynamicBundles(liveProducts) {
+    const cakes = liveProducts.filter(p => p.category === 'cakes' || p.id.toLowerCase().startsWith('cake'));
+    const flowers = liveProducts.filter(p => p.category === 'flowers' || p.id.toLowerCase().startsWith('flower') || p.id.toLowerCase().startsWith('ef_pc_flow'));
+    
+    const bundles = [];
+    
+    if (cakes.length > 0 && flowers.length > 0) {
+      const cake = cakes[0];
+      const flower = flowers[0];
+      
+      const b1Price = Math.round((cake.price + flower.price) * 0.9);
+      bundles.push({
+        id: "b1",
+        title: "Birthday Delight Surprise Bundle",
+        price: b1Price,
+        originalPrice: cake.price + flower.price,
+        category: "birthday",
+        image: "assets/images/birthday_bundle.png",
+        badge: "Most Loved Surprise",
+        deliveryEstimate: "Today (Within 3 Hours)",
+        items: [
+          `${cake.title}`,
+          `${flower.title}`,
+          "Premium Printed Birthday Greeting Card"
+        ],
+        description: `The ultimate birthday setup! Combines our bestselling fresh ${cake.title} with the elegant ${flower.title} and a customized card.`
+      });
+      
+      const b2Price = Math.round(flower.price * 1.15);
+      bundles.push({
+        id: "b2",
+        title: "Sincere Apologies Sympathy Set",
+        price: b2Price,
+        originalPrice: Math.round(flower.price * 1.25),
+        category: "sorry",
+        image: "assets/images/sorry_bundle.png",
+        badge: "Empathetic Choice",
+        deliveryEstimate: "Today (Same Day)",
+        items: [
+          `${flower.title}`,
+          "Chocolates & Joy Gift Box",
+          "Elegant Handwritten Apology Card"
+        ],
+        description: `Say 'I'm sorry' with pure elegance. Combines the beautiful ${flower.title} with comforting chocolates and a handwritten card.`
+      });
+    } else {
+      const items = liveProducts.slice(0, 2);
+      if (items.length >= 2) {
+        const item1 = items[0];
+        const item2 = items[1];
+        const bPrice = Math.round((item1.price + item2.price) * 0.9);
+        bundles.push({
+          id: "b1",
+          title: "Nelum Celebration Surprise Bundle",
+          price: bPrice,
+          originalPrice: item1.price + item2.price,
+          category: "birthday",
+          image: "assets/images/birthday_bundle.png",
+          badge: "Curated Bundle",
+          deliveryEstimate: "Today (Same Day)",
+          items: [
+            `${item1.title}`,
+            `${item2.title}`,
+            "Special Occasion Greeting Card"
+          ],
+          description: `A custom curated combination featuring ${item1.title} and ${item2.title}.`
+        });
+      }
+    }
+    
+    window.NELUM_CURRENT_BUNDLES = bundles;
+    return bundles;
   }
 
   // --- Renderer Functions ---
-
   function renderStarters() {
     startersGrid.innerHTML = CONVERSATION_STARTERS.map(starter => `
       <button class="starter-btn" data-context="${starter.context}">
@@ -107,6 +314,42 @@ document.addEventListener("DOMContentLoaded", () => {
         <span>${starter.text}</span>
       </button>
     `).join("");
+  }
+
+  async function loadRemindersAndRender() {
+    try {
+      const profile = await memoryStore.loadUserProfile('default-user');
+      const today = '2026-06-17'; // Anchor to current time context
+      const reminders = preferenceEngine.checkUpcomingOccasions(profile, today);
+      
+      if (reminders.length > 0) {
+        const reminder = reminders[0];
+        console.log(`[Nelum Memory] Detected upcoming occasion:`, reminder);
+        
+        // Customize the hero subtitle
+        const daysText = reminder.daysRemaining === 0 ? "today" : `in ${reminder.daysRemaining} days`;
+        chatHero.querySelector(".hero-subtitle").innerHTML = 
+          `Ayubowan! 🌸 **${reminder.recipient}**'s birthday is ${daysText} (${profile.frequentRecipients.find(r => r.name === reminder.recipient)?.birthday || ''}). Should I help you schedule a surprise for them?`;
+        
+        // Add a specialized starter at the beginning
+        const updatedStarters = [
+          { icon: "🎂", text: `Surprise ${reminder.recipient}`, context: `schedule-reminder:${reminder.recipient}` },
+          ...CONVERSATION_STARTERS.filter(s => s.context !== 'birthday')
+        ];
+        
+        startersGrid.innerHTML = updatedStarters.map(starter => `
+          <button class="starter-btn" data-context="${starter.context}">
+            <span class="starter-icon">${starter.icon}</span>
+            <span>${starter.text}</span>
+          </button>
+        `).join("");
+      } else {
+        renderStarters();
+      }
+    } catch (e) {
+      console.error("Error loading user profile or reminders:", e);
+      renderStarters();
+    }
   }
 
   function renderQuickChips() {
@@ -117,85 +360,232 @@ document.addEventListener("DOMContentLoaded", () => {
     `).join("");
   }
 
-  function renderProducts(productsList) {
-    if (productsList.length === 0) {
-      productGrid.innerHTML = `
-        <div class="empty-products-grid" style="grid-column: 1/-1; text-align: center; padding: 40px; color: var(--color-text-gray);">
-          🌸 Nelum found no matching individual items. Try another query or chip!
-        </div>
-      `;
-      return;
+  // --- Conversational Helpers & Inline Catalog Fetching ---
+  async function fetchAndAddNelumMessage(replyText, context) {
+    let category = "all";
+    if (context && context.extractedEntities && context.extractedEntities.category) {
+      category = context.extractedEntities.category;
+    } else if (context && context.activeState === 'PRODUCT_SEARCH') {
+      category = "all";
     }
-    
-    productGrid.innerHTML = productsList.map(product => {
-      const isSaved = false; // Mock state
-      return `
-        <div class="product-card" data-id="${product.id}">
-          ${product.badge ? `<span class="card-badge">${product.badge}</span>` : ""}
-          <button class="card-save-btn ${isSaved ? 'active' : ''}" aria-label="Save for later" data-id="${product.id}">
-            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5">
-              <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path>
-            </svg>
-          </button>
-          <div class="card-image-box">
-            <img class="card-image" src="${product.image}" alt="${product.title}" loading="lazy">
-          </div>
-          <div class="card-info">
-            <div class="card-rating-row">
-              <span class="card-rating-stars">★★★★★</span>
-              <span>(${product.reviews})</span>
-            </div>
-            <h4 class="card-title">${product.title}</h4>
-            <div class="card-delivery-est">
-              <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2">
-                <circle cx="12" cy="12" r="10"></circle>
-                <polyline points="12 6 12 12 16 14"></polyline>
-              </svg>
-              <span>${product.deliveryEstimate}</span>
-            </div>
-            <div class="card-action-row">
-              <span class="card-price">Rs. ${product.price.toLocaleString()}</span>
-              <button class="card-add-btn" aria-label="Add item" data-id="${product.id}">
-                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="3">
-                  <line x1="12" y1="5" x2="12" y2="19"></line>
-                  <line x1="5" y1="12" x2="19" y2="12"></line>
-                </svg>
-              </button>
-            </div>
-          </div>
-        </div>
-      `;
-    }).join("");
+
+    let searchWord = "cake";
+    let isRushOnly = false;
+    let isSaleOnly = false;
+    let maxPrice = (context && context.extractedEntities && context.extractedEntities.budget) || null;
+
+    if (category === "all") {
+      searchWord = "cake";
+    } else if (category === "birthday") {
+      searchWord = "cake";
+    } else if (category === "sorry") {
+      searchWord = "flower";
+    } else if (category === "anniversary") {
+      searchWord = "flower";
+    } else if (category === "mom") {
+      searchWord = "flower";
+    } else if (category === "dad") {
+      searchWord = "tea";
+    } else {
+      const categoryQueries = {
+        cakes: "cake",
+        flowers: "flower",
+        chocolates: "chocolate",
+        groceries: "tea",
+        grocery: "tea",
+        electronics: "electronic",
+        toys: "toy",
+        clothing: "shirt",
+        fashion: "handbag",
+        food: "food",
+        fruit_baskets: "basket",
+        gift_packs: "pack"
+      };
+      searchWord = categoryQueries[category] || category;
+    }
+
+    if (context && context.extractedEntities && context.extractedEntities.deliveryMode === 'same-day') {
+      isRushOnly = true;
+    }
+
+    try {
+      let liveProducts = [];
+      if (category === "all") {
+        const [cakes, flowers] = await Promise.all([
+          kaprukaClient.searchProducts("cake"),
+          kaprukaClient.searchProducts("flower")
+        ]);
+        liveProducts = [...cakes.slice(0, 3), ...flowers.slice(0, 3)];
+      } else {
+        liveProducts = await kaprukaClient.searchProducts(searchWord, null, maxPrice);
+      }
+
+      if (isRushOnly) {
+        liveProducts = liveProducts.filter(p => p.deliveryEstimate.toLowerCase().includes("today") || p.deliveryEstimate.toLowerCase().includes("same day"));
+      }
+
+      const displayProducts = liveProducts.slice(0, 6);
+      const dynamicBundles = generateDynamicBundles(liveProducts);
+
+      addMessageBubble(replyText, "nelum", displayProducts, dynamicBundles);
+    } catch (err) {
+      console.error("Error loading inline products:", err);
+      addMessageBubble(replyText, "nelum");
+    }
   }
 
-  function renderBundles(bundlesList) {
-    const bundlesArea = document.getElementById("bundles-area");
-    if (bundlesList.length === 0) {
-      bundlesArea.style.display = "none";
-      return;
-    }
-    bundlesArea.style.display = "block";
+  async function handleCategoryClick(categoryKey, label) {
+    chatHero.style.display = "none";
+    chatMessages.style.display = "flex";
 
-    bundlesCarousel.innerHTML = bundlesList.map(bundle => `
-      <div class="bundle-card" data-id="${bundle.id}">
-        <div class="bundle-image-box">
-          <img class="bundle-image" src="${bundle.image}" alt="${bundle.title}">
-        </div>
-        ${bundle.badge ? `<span class="bundle-badge">${bundle.badge}</span>` : ""}
-        <h4 class="bundle-title">${bundle.title}</h4>
-        <p class="bundle-desc">${bundle.description}</p>
-        <ul class="bundle-items-list">
-          ${bundle.items.map(item => `<li>${item}</li>`).join("")}
-        </ul>
-        <div class="bundle-footer">
-          <div class="bundle-price-box">
-            <span class="bundle-original-price">Rs. ${bundle.originalPrice.toLocaleString()}</span>
-            <span class="bundle-price">Rs. ${bundle.price.toLocaleString()}</span>
-          </div>
-          <button class="btn-bundle-add" data-id="${bundle.id}">Add Bundle</button>
-        </div>
-      </div>
-    `).join("");
+    addMessageBubble(`I want to explore ${label}`, "user");
+    showTypingIndicator(true);
+
+    const customReplies = {
+      cakes: "Looking for cakes? 🍰\n\nIs this for:\n• Birthday\n• Anniversary\n• Celebration\n• Office Party\n\nLet me help you choose the best flavor!",
+      flowers: "Looking for flowers? 🌹\n\nIs this for:\n• Birthday\n• Anniversary\n• Apology\n• Just Because\n\nLet me help you choose.",
+      chocolates: "Craving or gifting chocolates? 🍫\n\nWould you like:\n• Premium Imports (Ferrero, Toblerone)\n• Local Handcrafted\n• Assorted Gift Boxes\n\nLet me know your preference!",
+      clothing: "Searching for clothing? 👕\n\nWho is this for:\n• Men\n• Women\n• Kids\n\nLet's find the perfect fit and style!",
+      electronics: "Need some electronics? 🎮\n\nWhat are you looking for:\n• Gaming & Consoles\n• Audio & Headphones\n• Smart Accessories\n\nLet's find the right tech for you!",
+      food: "Hungry? 🍔\n\nAre you interested in:\n• Fast Food & Burgers\n• Traditional Sri Lankan\n• Desserts & Treats\n\nI can recommend the tastiest options!",
+      grocery: "Stocking up on groceries? 🛒\n\nWhich department:\n• Ceylon Tea & Beverages\n• Pantry Staples\n• Fresh Produce\n\nLet's add these essentials to your list!",
+      toys: "Shopping for toys? 🧸\n\nWhat age group:\n• Toddlers (0-3 years)\n• Kids (4-8 years)\n• Teens (9+ years)\n\nLet's find something fun!",
+      fashion: "Looking for fashion accessories? 👗\n\nWhat are we styling today:\n• Handbags & Wallets\n• Jewelry & Watches\n• Perfumes & Cosmetics\n\nLet's pick something elegant!",
+      fruit_baskets: "Want a healthy fruit basket? 🧺\n\nWho is this surprise for:\n• Get Well Soon\n• Congratulations\n• Family Sharing\n\nLet's select a fresh, premium assortment!",
+      gift_packs: "Sending a curated gift pack? 🎁\n\nWhat's the vibe:\n• Luxury Pampering\n• Tea Connoisseur\n• Sweet & Savory Mix\n\nLet's find a pre-packaged box of joy!"
+    };
+
+    const replyText = customReplies[categoryKey] || `Looking for ${label}? 🌸 Let me help you find the best options in our catalog!`;
+
+    try {
+      const sessionContext = await memoryStore.loadSession('default-session') || manager.createNewContext('default-session');
+      sessionContext.activeState = 'PRODUCT_SEARCH';
+      sessionContext.extractedEntities = {
+        ...sessionContext.extractedEntities,
+        category: categoryKey
+      };
+      await memoryStore.saveSession('default-session', sessionContext);
+
+      let searchWord = categoryKey;
+      const categoryQueries = {
+        cakes: "cake",
+        flowers: "flower",
+        chocolates: "chocolate",
+        grocery: "tea",
+        groceries: "tea",
+        electronics: "electronic",
+        toys: "toy",
+        clothing: "shirt",
+        fashion: "handbag",
+        food: "food",
+        fruit_baskets: "basket",
+        gift_packs: "pack"
+      };
+      searchWord = categoryQueries[categoryKey] || categoryKey;
+
+      const liveProducts = await kaprukaClient.searchProducts(searchWord);
+      const displayProducts = liveProducts.slice(0, 6);
+      const dynamicBundles = generateDynamicBundles(liveProducts);
+
+      document.querySelectorAll(".sidebar-menu li").forEach(li => {
+        li.classList.remove("active");
+        if (li.getAttribute("data-category") === categoryKey) {
+          li.classList.add("active");
+        }
+      });
+
+      showTypingIndicator(false);
+      addMessageBubble(replyText, "nelum", displayProducts, dynamicBundles);
+    } catch (err) {
+      showTypingIndicator(false);
+      console.error("Error handling category click:", err);
+      addMessageBubble(`Let's search for ${label}! 🌸`, "nelum");
+    }
+  }
+
+  async function handleSecondaryNavClick(actionKey, label) {
+    chatHero.style.display = "none";
+    chatMessages.style.display = "flex";
+
+    addMessageBubble(label, "user");
+    showTypingIndicator(true);
+
+    let replyText = "";
+    let searchWord = "cake";
+    let isRushOnly = false;
+    let isSaleOnly = false;
+
+    document.querySelectorAll(".sec-nav-btn").forEach(btn => {
+      btn.classList.remove("active");
+      if (btn.getAttribute("data-action") === actionKey) {
+        btn.classList.add("active");
+      }
+    });
+
+    const sessionContext = await memoryStore.loadSession('default-session') || manager.createNewContext('default-session');
+
+    if (actionKey === "shop") {
+      replyText = "Ayubowan 👋\n\nWelcome to Nelum's Conversational Shop! Tell me what you're looking for, or browse our standard categories. Here are some of our popular products:";
+      searchWord = "cake";
+      sessionContext.activeState = 'PRODUCT_SEARCH';
+    } else if (actionKey === "rush") {
+      replyText = "Ayubowan 👋\n\nNeed something delivered quickly? Here are today's fastest delivery options, verified for Colombo and surrounding areas.";
+      searchWord = "flower";
+      isRushOnly = true;
+      sessionContext.activeState = 'PRODUCT_SEARCH';
+      sessionContext.extractedEntities.deliveryMode = 'same-day';
+    } else if (actionKey === "sale") {
+      replyText = "Ayubowan 👋\n\nLooking for the best deals? Here are today's top discounted items on Kapruka!";
+      searchWord = "chocolate";
+      isSaleOnly = true;
+      sessionContext.activeState = 'PRODUCT_SEARCH';
+    } else if (actionKey === "events") {
+      replyText = "Ayubowan 👋\n\nPlanning for a special event? Whether it's a Birthday, Anniversary, Mother's Day, or Graduation, I can guide you through the perfect surprise journey.\n\nWhich type of event are you shopping for?";
+      searchWord = "cake";
+      sessionContext.activeState = 'GIFT_DISCOVERY';
+    } else if (actionKey === "brands") {
+      replyText = "Ayubowan 👋\n\nWhich type of brands are you interested in today? We have partners in Electronics, Fashion, Food, Beauty, and Lifestyle. Here are some recommended brand items:";
+      searchWord = "tea";
+      sessionContext.activeState = 'PRODUCT_SEARCH';
+    } else if (actionKey === "foryou") {
+      replyText = "Ayubowan 👋\n\nWelcome to your personalized space. Based on your profile preferences and upcoming events, I've selected these recommendations:";
+      searchWord = "cake";
+      sessionContext.activeState = 'BUNDLE_BUILDING';
+    }
+
+    await memoryStore.saveSession('default-session', sessionContext);
+
+    try {
+      let liveProducts = [];
+      if (actionKey === "foryou") {
+        const profile = await memoryStore.loadUserProfile('default-user');
+        if (profile && profile.purchaseHistory && profile.purchaseHistory.length > 0) {
+          const topAffinities = Object.entries(profile.categoryAffinities || {})
+            .sort((a, b) => b[1] - a[1])
+            .map(e => e[0]);
+          const affinityWord = topAffinities[0] === "cakes" ? "cake" : topAffinities[0] === "flowers" ? "flower" : "chocolate";
+          liveProducts = await kaprukaClient.searchProducts(affinityWord);
+        } else {
+          liveProducts = await kaprukaClient.searchProducts("cake");
+        }
+      } else {
+        liveProducts = await kaprukaClient.searchProducts(searchWord);
+      }
+
+      if (isRushOnly) {
+        liveProducts = liveProducts.filter(p => p.deliveryEstimate.toLowerCase().includes("today") || p.deliveryEstimate.toLowerCase().includes("same day"));
+      }
+
+      const displayProducts = liveProducts.slice(0, 6);
+      const dynamicBundles = generateDynamicBundles(liveProducts);
+
+      showTypingIndicator(false);
+      addMessageBubble(replyText, "nelum", displayProducts, dynamicBundles);
+    } catch (err) {
+      showTypingIndicator(false);
+      console.error("Error executing secondary nav action:", err);
+      addMessageBubble(replyText, "nelum");
+    }
   }
 
   // --- Event Listeners Setup ---
@@ -207,7 +597,13 @@ document.addEventListener("DOMContentLoaded", () => {
       if (!btn) return;
       const context = btn.getAttribute("data-context");
       const label = btn.querySelector("span:last-child").textContent;
-      handleStarterClick(label, context);
+      
+      if (context.startsWith("schedule-reminder:")) {
+        const recipientName = context.split(":")[1];
+        handleReminderSchedule(recipientName);
+      } else {
+        handleStarterClick(label, context);
+      }
     });
 
     // Quick Chips Click
@@ -228,50 +624,158 @@ document.addEventListener("DOMContentLoaded", () => {
       }
     });
 
-    // Product Grid Clicks (Detail & Add to Cart)
-    productGrid.addEventListener("click", (e) => {
-      const card = e.target.closest(".product-card");
-      if (!card) return;
-      
-      const productId = card.getAttribute("data-id");
-      
-      // Save heart button click
-      const saveBtn = e.target.closest(".card-save-btn");
-      if (saveBtn) {
-        e.stopPropagation();
-        saveBtn.classList.toggle("active");
-        showToast(saveBtn.classList.contains("active") ? "Saved to your inspiration list!" : "Removed from saved.");
-        return;
-      }
-      
-      // Add to bundle button click
-      const addBtn = e.target.closest(".card-add-btn");
+    // Sidebar Category clicks
+    const categoriesSidebar = document.getElementById("categories-sidebar");
+    if (categoriesSidebar) {
+      categoriesSidebar.addEventListener("click", (e) => {
+        const li = e.target.closest("li");
+        if (!li) return;
+        const categoryKey = li.getAttribute("data-category");
+        const label = li.textContent.trim();
+        handleCategoryClick(categoryKey, label);
+        
+        // Auto-close on mobile
+        if (categoriesSidebar.classList.contains("sidebar-open")) {
+          categoriesSidebar.classList.remove("sidebar-open");
+        }
+      });
+    }
+
+    // Secondary Nav clicks
+    const secondaryNav = document.getElementById("secondary-nav");
+    if (secondaryNav) {
+      secondaryNav.addEventListener("click", (e) => {
+        const btn = e.target.closest(".sec-nav-btn");
+        if (!btn) return;
+        const actionKey = btn.getAttribute("data-action");
+        const label = btn.textContent.trim();
+        handleSecondaryNavClick(actionKey, label);
+      });
+    }
+
+    // Language switcher click
+    const langSwitcher = document.querySelector(".lang-switcher");
+    if (langSwitcher) {
+      langSwitcher.addEventListener("click", (e) => {
+        const btn = e.target.closest(".lang-btn");
+        if (!btn) return;
+        
+        langSwitcher.querySelectorAll(".lang-btn").forEach(b => b.classList.remove("active"));
+        btn.classList.add("active");
+        
+        const lang = btn.getAttribute("data-lang");
+        
+        memoryStore.loadSession('default-session').then(context => {
+          const activeCtx = context || manager.createNewContext('default-session');
+          activeCtx.languageCode = lang;
+          memoryStore.saveSession('default-session', activeCtx).then(() => {
+            let msg = "";
+            if (lang === "en") {
+              msg = "Language switched to English. How can I help you today? 🌸";
+            } else if (lang === "si") {
+              msg = "භාෂාව සිංහලට වෙනස් කරන ලදි. අද මම ඔබට උදව් කරන්නේ කෙසේද? 🌸";
+            } else if (lang === "ta") {
+              msg = "மொழி தமிழுக்கு மாற்றப்பட்டது. இன்று நான் உங்களுக்கு எவ்வாறு உதவ முடியும்? 🌸";
+            }
+            addMessageBubble(msg, "nelum");
+          });
+        });
+      });
+    }
+
+    // Top Nav buttons
+    const btnTrackOrdersNav = document.getElementById("btn-track-orders-nav");
+    if (btnTrackOrdersNav) {
+      btnTrackOrdersNav.addEventListener("click", () => {
+        chatHero.style.display = "none";
+        chatMessages.style.display = "flex";
+        
+        if (activeOrder) {
+          trackingModal.style.display = "flex";
+        } else {
+          addMessageBubble("Track my order", "user");
+          showTypingIndicator(true);
+          setTimeout(() => {
+            showTypingIndicator(false);
+            addMessageBubble("Let's check your order! 📦 Please enter your Kapruka Order Reference (e.g. #KP-74892) in the chat input below, and I'll fetch the live tracking details for you.", "nelum");
+          }, 800);
+        }
+      });
+    }
+
+    const btnUserProfileNav = document.getElementById("btn-user-profile-nav");
+    if (btnUserProfileNav) {
+      btnUserProfileNav.addEventListener("click", () => {
+        chatHero.style.display = "none";
+        chatMessages.style.display = "flex";
+        
+        addMessageBubble("Show my user profile", "user");
+        showTypingIndicator(true);
+        setTimeout(() => {
+          showTypingIndicator(false);
+          addMessageBubble("Here is your profile information 👤\n\n• **Name**: Sethika Moraes\n• **Saved Address**: No. 23, Flower Road, Colombo 07\n• **Preferred Delivery City**: Colombo\n• **Frequent Occasions**: Mother's Birthday (June 18)\n\nLet me know if you would like me to update your preferences or find suggestions for upcoming occasions! 🌸", "nelum");
+        }, 800);
+      });
+    }
+
+    // Dynamic Delegation inside Chat Bubble
+    chatMessages.addEventListener("click", (e) => {
+      // 1. Add to cart button
+      const addBtn = e.target.closest(".chat-card-add-btn");
       if (addBtn) {
         e.stopPropagation();
+        const productId = addBtn.getAttribute("data-id");
         addToCart(productId, false);
         return;
       }
-      
-      // Default: show product detail modal
-      showProductDetail(productId);
-    });
 
-    // Bundle Grid Clicks
-    bundlesCarousel.addEventListener("click", (e) => {
-      const card = e.target.closest(".bundle-card");
-      if (!card) return;
-      
-      const bundleId = card.getAttribute("data-id");
-      const addBtn = e.target.closest(".btn-bundle-add");
-      
-      if (addBtn) {
+      // 2. View details button
+      const detailsBtn = e.target.closest(".chat-card-details-btn");
+      if (detailsBtn) {
         e.stopPropagation();
+        const productId = detailsBtn.getAttribute("data-id");
+        showProductDetail(productId);
+        return;
+      }
+
+      // 3. Add bundle button
+      const addBundleBtn = e.target.closest(".chat-btn-bundle-add");
+      if (addBundleBtn) {
+        e.stopPropagation();
+        const bundleId = addBundleBtn.getAttribute("data-id");
         addToCart(bundleId, true);
         return;
       }
+
+      // 4. Clicking the card itself
+      const productCard = e.target.closest(".chat-product-card");
+      if (productCard) {
+        const productId = productCard.getAttribute("data-id");
+        showProductDetail(productId);
+        return;
+      }
       
-      // Standard click: show bundle detail
-      showBundleDetail(bundleId);
+      const bundleCard = e.target.closest(".chat-bundle-card");
+      if (bundleCard) {
+        const bundleId = bundleCard.getAttribute("data-id");
+        showBundleDetail(bundleId);
+        return;
+      }
+    });
+
+    // Scroll hide secondary nav
+    let lastScrollTop = 0;
+    chatMessages.addEventListener("scroll", () => {
+      const st = chatMessages.scrollTop;
+      const secondaryNav = document.getElementById("secondary-nav");
+      if (!secondaryNav) return;
+
+      if (st > lastScrollTop && st > 30) {
+        secondaryNav.classList.add("nav-hidden");
+      } else {
+        secondaryNav.classList.remove("nav-hidden");
+      }
+      lastScrollTop = st <= 0 ? 0 : st;
     });
 
     // Cart Panel Toggles
@@ -317,6 +821,14 @@ document.addEventListener("DOMContentLoaded", () => {
     giftMessageInput.addEventListener("input", () => {
       const val = giftMessageInput.value.trim();
       previewTextContent.textContent = val ? `"${val}"` : `"Type a gift message in the cart drawer..."`;
+      
+      // Sync into backend session cache
+      memoryStore.loadSession('default-session').then(context => {
+        if (context) {
+          context.cart.greetingCardMessage = val;
+          memoryStore.saveSession('default-session', context);
+        }
+      });
     });
 
     // Flow navigation: Cart -> Delivery Details Screen
@@ -348,7 +860,6 @@ document.addEventListener("DOMContentLoaded", () => {
       trackingModal.style.display = "none";
       if (trackingInterval) clearInterval(trackingInterval);
       
-      // Add simulated user question
       addMessageBubble("Can you verify when the delivery driver will arrive at Colombo 07?", "user");
       showTypingIndicator(true);
       
@@ -368,8 +879,14 @@ document.addEventListener("DOMContentLoaded", () => {
       showTypingIndicator(true);
       setTimeout(() => {
         showTypingIndicator(false);
-        addMessageBubble("Oh! What a lovely room setup. The soft pink pastel aesthetics look wonderful. Based on this, I recommend our 'Eternal Romance Red Rose Bouquet' or a 'White Lilies' arrangement which fits perfectly into this theme. 🌸", "nelum");
-        filterShowcase("flowers");
+        
+        kaprukaClient.searchProducts("flower").then(liveProducts => {
+          const displayProducts = liveProducts.slice(0, 4);
+          const dynamicBundles = generateDynamicBundles(liveProducts);
+          addMessageBubble("Oh! What a lovely room setup. The soft pink pastel aesthetics look wonderful. Based on this, I recommend our 'Eternal Romance Red Rose Bouquet' or a 'White Lilies' arrangement which fits perfectly into this theme. 🌸", "nelum", displayProducts, dynamicBundles);
+        }).catch(err => {
+          addMessageBubble("Oh! What a lovely room setup. The soft pink pastel aesthetics look wonderful. Based on this, I recommend checking our beautiful roses or lilies! 🌸", "nelum");
+        });
       }, 2000);
     });
 
@@ -378,7 +895,7 @@ document.addEventListener("DOMContentLoaded", () => {
     navDiscover.addEventListener("click", () => switchMobileTab("discover"));
     navCart.addEventListener("click", () => {
       toggleCartDrawer(true);
-      switchMobileTab("chat"); // Keep background safe
+      switchMobileTab("chat");
     });
     navOrders.addEventListener("click", () => {
       if (activeOrder) {
@@ -413,56 +930,78 @@ document.addEventListener("DOMContentLoaded", () => {
     document.querySelectorAll(".mobile-nav-item").forEach(item => item.classList.remove("active"));
     
     const chatPane = document.getElementById("chat-section");
-    const showcasePane = document.getElementById("showcase-section");
+    const categoriesSidebar = document.getElementById("categories-sidebar");
     
     if (tab === "chat") {
       navChat.classList.add("active");
-      chatPane.style.display = "flex";
-      showcasePane.style.display = "none";
+      if (categoriesSidebar) categoriesSidebar.classList.remove("sidebar-open");
     } else if (tab === "discover") {
       navDiscover.classList.add("active");
-      chatPane.style.display = "none";
-      showcasePane.style.display = "flex";
+      if (categoriesSidebar) {
+        categoriesSidebar.classList.toggle("sidebar-open");
+      }
     }
   }
 
   // --- Cart System Operations ---
-
   function toggleCartDrawer(open) {
     cartDrawer.style.display = open ? "block" : "none";
   }
 
-  function addToCart(itemId, isBundle) {
-    let item = null;
-    if (isBundle) {
-      item = NELUM_BUNDLES.find(b => b.id === itemId);
-    } else {
-      item = NELUM_PRODUCTS.find(p => p.id === itemId);
+  async function addToCart(itemId, isBundle) {
+    try {
+      let item = null;
+      if (isBundle) {
+        const currentBundles = window.NELUM_CURRENT_BUNDLES || [];
+        item = currentBundles.find(b => b.id === itemId);
+      } else {
+        item = await kaprukaClient.getProduct(itemId);
+      }
+
+      if (!item) return;
+
+      const context = await memoryStore.loadSession('default-session');
+      const activeCtx = context || manager.createNewContext('default-session');
+      activeCtx.cart = activeCtx.cart || { items: [], subtotal: 0, greetingCardMessage: null };
+      
+      activeCtx.cart.items.push({
+        productId: item.id,
+        title: item.title,
+        price: item.price,
+        image: item.image,
+        category: item.category || 'cakes',
+        qty: 1,
+        isBundle: isBundle
+      });
+
+      manager.recalculateCartSubtotal(activeCtx);
+      await memoryStore.saveSession('default-session', activeCtx);
+      
+      cart = activeCtx.cart.items;
+      updateCartUI();
+      showToast(`Added "${item.title}" to your gift bundle!`);
+      
+      btnCartToggle.style.transform = "scale(1.15)";
+      setTimeout(() => btnCartToggle.style.transform = "scale(1)", 200);
+    } catch (err) {
+      console.error("Error adding to cart:", err);
+      showToast("Could not add item to cart.");
     }
-
-    if (!item) return;
-
-    cart.push({
-      id: item.id,
-      title: item.title,
-      price: item.price,
-      image: item.image,
-      isBundle: isBundle
-    });
-
-    updateCartUI();
-    showToast(`Added "${item.title}" to your gift bundle!`);
-    
-    // Animated bounce on cart icons
-    btnCartToggle.style.transform = "scale(1.15)";
-    setTimeout(() => btnCartToggle.style.transform = "scale(1)", 200);
   }
 
   function removeFromCart(index) {
-    const removedItem = cart[index];
-    cart.splice(index, 1);
-    updateCartUI();
-    showToast(`Removed "${removedItem.title}"`);
+    memoryStore.loadSession('default-session').then(context => {
+      if (context && context.cart && context.cart.items) {
+        const removedItem = context.cart.items[index];
+        context.cart.items.splice(index, 1);
+        manager.recalculateCartSubtotal(context);
+        memoryStore.saveSession('default-session', context).then(() => {
+          cart = context.cart.items;
+          updateCartUI();
+          showToast(`Removed "${removedItem.title}"`);
+        });
+      }
+    });
   }
 
   function updateCartUI() {
@@ -502,45 +1041,46 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   // --- Product & Bundle Detail Modals ---
+  async function showProductDetail(productId) {
+    try {
+      const product = await kaprukaClient.getProduct(productId);
+      if (!product) return;
 
-  function showProductDetail(productId) {
-    const product = NELUM_PRODUCTS.find(p => p.id === productId);
-    if (!product) return;
+      detailBadge.style.display = product.badge ? "inline-block" : "none";
+      if (product.badge) detailBadge.textContent = product.badge;
+      
+      detailTitle.textContent = product.title;
+      detailReviews.textContent = `(${product.reviews} reviews)`;
+      detailPrice.textContent = `Rs. ${product.price.toLocaleString()}`;
+      detailDesc.textContent = product.description;
+      detailDelivery.innerHTML = `
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="10"></circle>
+          <polyline points="12 6 12 12 16 14"></polyline>
+        </svg>
+        <span>Delivery estimate: <strong>${product.deliveryEstimate}</strong></span>
+      `;
 
-    detailBadge.style.display = product.badge ? "inline-block" : "none";
-    if (product.badge) detailBadge.textContent = product.badge;
-    
-    detailTitle.textContent = product.title;
-    detailReviews.textContent = `(${product.reviews} reviews)`;
-    detailPrice.textContent = `Rs. ${product.price.toLocaleString()}`;
-    detailDesc.textContent = product.description;
-    detailDelivery.innerHTML = `
-      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
-        <circle cx="12" cy="12" r="10"></circle>
-        <polyline points="12 6 12 12 16 14"></polyline>
-      </svg>
-      <span>Delivery estimate: <strong>${product.deliveryEstimate}</strong></span>
-    `;
+      detailSpecs.innerHTML = (product.specs || []).map(spec => `<li>${spec}</li>`).join("");
 
-    // Specs list
-    detailSpecs.innerHTML = product.specs.map(spec => `<li>${spec}</li>`).join("");
+      detailImage.src = product.image;
+      thumb1.src = product.image;
+      thumb2.src = product.image;
+      thumb3.src = product.image;
 
-    // Setup gallery images
-    detailImage.src = product.image;
-    thumb1.src = product.image;
-    
-    // Styled fallbacks for multi-photo gallery
-    thumb2.src = product.image;
-    thumb3.src = product.image;
+      btnDetailAdd.setAttribute("data-id", product.id);
+      btnDetailAdd.setAttribute("data-is-bundle", "false");
 
-    btnDetailAdd.setAttribute("data-id", product.id);
-    btnDetailAdd.setAttribute("data-is-bundle", "false");
-
-    productDetailModal.style.display = "flex";
+      productDetailModal.style.display = "flex";
+    } catch (err) {
+      console.error("Error showing product details:", err);
+      showToast("Could not retrieve live product details.");
+    }
   }
 
   function showBundleDetail(bundleId) {
-    const bundle = NELUM_BUNDLES.find(b => b.id === bundleId);
+    const currentBundles = window.NELUM_CURRENT_BUNDLES || [];
+    const bundle = currentBundles.find(b => b.id === bundleId);
     if (!bundle) return;
 
     detailBadge.style.display = "inline-block";
@@ -558,7 +1098,6 @@ document.addEventListener("DOMContentLoaded", () => {
       <span>Delivery estimate: <strong>${bundle.deliveryEstimate}</strong></span>
     `;
 
-    // Items included
     detailSpecs.innerHTML = bundle.items.map(item => `<li>${item}</li>`).join("");
 
     detailImage.src = bundle.image;
@@ -573,14 +1112,12 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   // --- Delivery & Checkout Screens ---
-
   function openDeliveryModal() {
     if (cart.length === 0) {
       showToast("Your cart is empty! Add gifts first.");
       return;
     }
 
-    // Populate surprise package items in delivery summary
     deliverySummaryItems.innerHTML = cart.map(item => `
       <div class="summary-item-card">
         <img class="summary-item-img" src="${item.image}" alt="${item.title}">
@@ -591,7 +1128,6 @@ document.addEventListener("DOMContentLoaded", () => {
       </div>
     `).join("");
 
-    // Greeting card card message
     const msg = giftMessageInput.value.trim();
     if (msg) {
       deliveryCardPreview.style.display = "block";
@@ -611,44 +1147,109 @@ document.addEventListener("DOMContentLoaded", () => {
     const dTime = document.getElementById("delivery-time").value;
     const sName = document.getElementById("sender-name").value.trim();
     
-    // Save order data
-    activeOrder = {
-      recipientName: rName,
-      recipientPhone: rPhone,
-      recipientAddress: rAddress,
-      deliveryDate: dDate,
-      deliveryTime: dTime,
-      senderName: sName,
-      items: [...cart],
-      message: giftMessageInput.value.trim()
-    };
+    memoryStore.loadSession('default-session').then(context => {
+      if (context) {
+        context.delivery = {
+          recipientName: rName,
+          recipientPhone: rPhone,
+          address: rAddress,
+          date: dDate,
+          timeWindow: dTime,
+          senderName: sName
+        };
+        context.activeState = 'CHECKOUT';
 
-    // Populate Tracking Screen details
-    document.getElementById("track-recipient-name").textContent = rName;
-    document.getElementById("track-recipient-address").textContent = rAddress;
-    document.getElementById("track-delivery-date").textContent = dDate;
-    
-    const timeLabels = {
-      any: "Anytime (8 AM - 6 PM)",
-      morning: "Morning (8 AM - 12 PM)",
-      afternoon: "Afternoon (12 PM - 4 PM)",
-      evening: "Evening (4 PM - 8 PM)"
-    };
-    document.getElementById("track-delivery-time").textContent = timeLabels[dTime] || dTime;
+        document.getElementById("track-recipient-name").textContent = rName;
+        document.getElementById("track-recipient-address").textContent = rAddress;
+        document.getElementById("track-delivery-date").textContent = dDate;
+        
+        const timeLabels = {
+          any: "Anytime (8 AM - 6 PM)",
+          morning: "Morning (8 AM - 12 PM)",
+          afternoon: "Afternoon (12 PM - 4 PM)",
+          evening: "Evening (4 PM - 8 PM)"
+        };
+        document.getElementById("track-delivery-time").textContent = timeLabels[dTime] || dTime;
 
-    // Clear cart
-    cart = [];
-    updateCartUI();
-    giftMessageInput.value = "";
+        kaprukaClient.createOrder(
+          context.cart.items,
+          context.delivery,
+          { name: sName, email: 'customer@kapruka.com' },
+          context.cart.greetingCardMessage,
+          dDate
+        ).then(result => {
+          activeOrder = {
+            recipientName: rName,
+            recipientPhone: rPhone,
+            recipientAddress: rAddress,
+            deliveryDate: dDate,
+            deliveryTime: dTime,
+            senderName: sName,
+            items: [...cart],
+            message: giftMessageInput.value.trim(),
+            orderId: result.orderId
+          };
 
-    // Close checkout modals
-    deliveryModal.style.display = "none";
-    
-    // Show tracking modal
-    trackingModal.style.display = "flex";
-    
-    // Start timeline simulation
-    startTrackingSimulation();
+          document.querySelector(".tracking-subtitle strong").textContent = result.orderId;
+
+          // Update category affinities using habitLearningEngine
+          memoryStore.loadUserProfile('default-user').then(profile => {
+            if (profile) {
+              let updatedProfile = { ...profile };
+              activeOrder.items.forEach(item => {
+                const category = item.category || 'cakes';
+                updatedProfile = habitLearningEngine.updateAffinity(updatedProfile, category);
+              });
+              memoryStore.saveUserProfile('default-user', updatedProfile).then(() => {
+                console.log("[Nelum Memory] Category affinities updated upon checkout completion.");
+              });
+            }
+          });
+
+          // Clear cart
+          context.cart.items = [];
+          context.cart.subtotal = 0;
+          context.cart.greetingCardMessage = null;
+
+          memoryStore.saveSession('default-session', context).then(() => {
+            cart = [];
+            updateCartUI();
+            giftMessageInput.value = "";
+            deliveryModal.style.display = "none";
+            trackingModal.style.display = "flex";
+
+            // Setup card payment box and simulation link
+            const payBox = document.getElementById("track-payment-box");
+            const payBtn = document.getElementById("btn-pay-now");
+            if (payBox && payBtn && result.paymentUrl) {
+              payBox.style.display = "block";
+              payBtn.href = result.paymentUrl;
+              
+              activeTrackingStep = 1;
+              updateTrackingTimelineUI();
+              if (trackingInterval) clearInterval(trackingInterval);
+              
+              const newPayBtn = payBtn.cloneNode(true);
+              payBtn.parentNode.replaceChild(newPayBtn, payBtn);
+              
+              newPayBtn.addEventListener("click", (evt) => {
+                evt.preventDefault();
+                showToast("Opening payment gateway tab...");
+                window.open(result.paymentUrl, '_blank');
+                
+                setTimeout(() => {
+                  payBox.style.display = "none";
+                  showToast("Payment confirmed! Dispatched for baking & florist collection. 🌸");
+                  startTrackingSimulation();
+                }, 3000);
+              });
+            } else {
+              startTrackingSimulation();
+            }
+          });
+        });
+      }
+    });
   }
 
   function startTrackingSimulation() {
@@ -657,7 +1258,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
     if (trackingInterval) clearInterval(trackingInterval);
 
-    // Increment steps every 12 seconds to mock live logistics dispatch
     trackingInterval = setInterval(() => {
       if (activeTrackingStep < 5) {
         activeTrackingStep++;
@@ -691,86 +1291,133 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   // --- Chat Conversation Engine ---
-
   function handleStarterClick(label, context) {
-    // Hide Hero landing and show messages
     chatHero.style.display = "none";
     chatMessages.style.display = "flex";
 
     addMessageBubble(`I am looking for a ${label}.`, "user");
-    
     showTypingIndicator(true);
 
-    setTimeout(() => {
+    manager.processMessage('default-session', `I am looking for a ${label}`).then(reply => {
       showTypingIndicator(false);
-      let nelumResponse = "";
       
-      if (context === "birthday") {
-        nelumResponse = "Birthdays are special! 🎂 I've loaded our absolute best celebration cakes, fresh bouquets, and toy gifts in the showcase. For an ultimate setup, check out the **Birthday Delight Surprise Bundle** on the right! It bundles a Black Forest gateau, fresh red roses, a teddy bear, and a premium greeting card.\n\nShould we narrow it down by price range, or did something catch your eye?";
-        filterShowcase("birthday");
-      } else if (context === "sorry") {
-        nelumResponse = "A heartfelt apology bundle speaks volumes. 🌹 I have filtered for premium lilies, rose bouquets, and gourmet chocolates on the right. Our **Sincere Apologies Sympathy Set** includes a handwritten card with same-day delivery. \n\nLet me know if you would like to type a personal note for the greeting card!";
-        filterShowcase("sorry");
-      } else if (context === "anniversary") {
-        nelumResponse = "Happy Anniversary! 💝 I have loaded the romantic red rose bouquet, tea box assortments, and luxury chocolates. I highly recommend the **Golden Anniversary Celebration Bundle** to make it memorable. \n\nWould you like me to coordinate a specific morning delivery time?";
-        filterShowcase("anniversary");
-      } else {
-        nelumResponse = `I've opened the **${label}** showcase panel on the right. You'll see local Kapruka favorites ready for same-day delivery. Take a look and tap any card to customize or add to your bundle! 🌸`;
-        filterShowcase(context);
-      }
-
-      addMessageBubble(nelumResponse, "nelum");
-    }, 1500);
+      memoryStore.loadSession('default-session').then(sessionContext => {
+        if (sessionContext && sessionContext.cart) {
+          cart = sessionContext.cart.items;
+          updateCartUI();
+        }
+        fetchAndAddNelumMessage(reply, sessionContext);
+      });
+    });
   }
 
-  function handleQuickAction(label, action) {
+  function handleReminderSchedule(recipientName) {
+    chatHero.style.display = "none";
+    chatMessages.style.display = "flex";
+    
+    addMessageBubble(`Schedule a birthday surprise for ${recipientName} like last year.`, "user");
+    showTypingIndicator(true);
+    
+    memoryStore.loadUserProfile('default-user').then(profile => {
+      const today = '2026-06-17';
+      const reminders = preferenceEngine.checkUpcomingOccasions(profile, today);
+      const reminder = reminders.find(r => r.recipient === recipientName);
+      if (!reminder) {
+        showTypingIndicator(false);
+        addMessageBubble("Aiyo, I couldn't locate the birthday reminder. Let's find some gifts manually!", "nelum");
+        return;
+      }
+      
+      memoryStore.loadSession('default-session').then(context => {
+        const activeCtx = context || manager.createNewContext('default-session');
+        activeCtx.activeState = 'ORDER_REVIEW';
+        activeCtx.extractedEntities = {
+          recipient: reminder.relationship,
+          occasion: 'birthday',
+          city: 'Colombo',
+          budget: 10000
+        };
+        activeCtx.delivery = {
+          recipientName: reminder.recipient,
+          recipientPhone: '077 123 4567',
+          address: reminder.address,
+          date: new Date(Date.now() + 86400000).toISOString().split('T')[0],
+          timeWindow: 'morning',
+          senderName: 'Sethika Moraes'
+        };
+        
+        kaprukaClient.getProduct(reminder.suggestedItem).then(item => {
+          if (item) {
+            activeCtx.cart.items = [{
+              productId: item.id,
+              title: item.title,
+              price: item.price,
+              image: item.image,
+              qty: 1,
+              isBundle: false
+            }];
+            activeCtx.cart.subtotal = item.price;
+            activeCtx.cart.greetingCardMessage = "Happy Birthday! Hamaදාම සතුටින් ඉන්න. 🎂";
+          }
+          
+          manager.recalculateCartSubtotal(activeCtx);
+          memoryStore.saveSession('default-session', activeCtx).then(() => {
+            cart = activeCtx.cart.items;
+            updateCartUI();
+            
+            document.getElementById("recipient-name").value = activeCtx.delivery.recipientName;
+            document.getElementById("recipient-phone").value = activeCtx.delivery.recipientPhone;
+            document.getElementById("delivery-address").value = activeCtx.delivery.address;
+            document.getElementById("delivery-date").value = activeCtx.delivery.date;
+            document.getElementById("delivery-time").value = activeCtx.delivery.timeWindow;
+            document.getElementById("sender-name").value = activeCtx.delivery.senderName;
+            
+            kaprukaClient.searchProducts("cake").then(liveProducts => {
+              const displayProducts = liveProducts.slice(0, 4);
+              const dynamicBundles = generateDynamicBundles(liveProducts);
+              showTypingIndicator(false);
+              addMessageBubble(`All set! I've loaded your surprise details for **${reminder.recipient}**. I've added the **${item.title}** (Rs. ${item.price.toLocaleString()}) to your cart and pre-filled the delivery address. You can review your gifts in the drawer and proceed when ready! 🌸`, "nelum", displayProducts, dynamicBundles);
+            }).catch(err => {
+              showTypingIndicator(false);
+              addMessageBubble(`All set! I've loaded your surprise details for **${reminder.recipient}**. I've added the **${item.title}** (Rs. ${item.price.toLocaleString()}) to your cart and pre-filled the delivery address. You can review your gifts in the drawer and proceed when ready! 🌸`, "nelum");
+            });
+          });
+        });
+      });
+    });
+  }
+
+  async function handleQuickAction(label, action) {
     chatHero.style.display = "none";
     chatMessages.style.display = "flex";
 
     addMessageBubble(label, "user");
     showTypingIndicator(true);
 
-    setTimeout(() => {
+    try {
+      const reply = await manager.processMessage('default-session', label);
       showTypingIndicator(false);
-      let reply = "";
       
-      if (action === "price-5000") {
-        const filtered = NELUM_PRODUCTS.filter(p => p.price < 5000);
-        renderProducts(filtered);
-        renderBundles([]);
-        showcaseTitle.textContent = "Gifts Under Rs. 5,000";
-        showcaseTag.textContent = "Budget-Friendly";
-        reply = "Here are our high-quality gifts under Rs. 5,000. I've filtered out cakes, chocolates, and cute teddy bears that fit perfectly within this range. 🌸";
-      } else if (action === "price-10000") {
-        const filtered = NELUM_PRODUCTS.filter(p => p.price < 10000);
-        const bundlesFiltered = NELUM_BUNDLES.filter(b => b.price < 10000);
-        renderProducts(filtered);
-        renderBundles(bundlesFiltered);
-        showcaseTitle.textContent = "Gifts Under Rs. 10,000";
-        showcaseTag.textContent = "Under Rs. 10K";
-        reply = "Filtered to show products and bundles under Rs. 10,000. Take a look at the fresh rose bouquet and chocolate gift boxes on the right! 🌸";
-      } else if (action === "delivery-sameday") {
-        const filtered = NELUM_PRODUCTS.filter(p => p.deliveryEstimate.toLowerCase().includes("today") || p.deliveryEstimate.toLowerCase().includes("hour"));
-        const bundlesFiltered = NELUM_BUNDLES.filter(b => b.deliveryEstimate.toLowerCase().includes("today"));
-        renderProducts(filtered);
-        renderBundles(bundlesFiltered);
-        showcaseTitle.textContent = "Same-Day Delivery Gifts";
-        showcaseTag.textContent = "Fast Track";
-        reply = "I've filtered to show items and bundles that can be prepared and delivered today (same-day delivery) to Colombo. What time should we schedule the surprise? 🚗";
-      } else if (action === "filter-bestseller") {
-        const filtered = NELUM_PRODUCTS.filter(p => p.badge && p.badge.toLowerCase().includes("bestseller"));
-        renderProducts(filtered);
-        renderBundles(NELUM_BUNDLES);
-        showcaseTitle.textContent = "Kapruka Best Sellers";
-        showcaseTag.textContent = "Trending";
-        reply = "These are our absolute best sellers! The Signature Black Forest Gateau and Rose Bouquet are top customer favorites for special surprises. 🌸";
-      } else {
-        reply = `I have loaded search parameters for "${label}" on the right! Let me know if you want to add customized packaging or cards. 🌸`;
-        filterShowcase("all");
+      const sessionContext = await memoryStore.loadSession('default-session');
+      if (sessionContext && sessionContext.cart) {
+        cart = sessionContext.cart.items;
+        updateCartUI();
       }
 
-      addMessageBubble(reply, "nelum");
-    }, 1400);
+      if (action === "price-5000") {
+        sessionContext.extractedEntities.budget = 5000;
+      } else if (action === "price-10000") {
+        sessionContext.extractedEntities.budget = 10000;
+      } else if (action === "delivery-sameday") {
+        sessionContext.extractedEntities.deliveryMode = 'same-day';
+      }
+
+      fetchAndAddNelumMessage(reply, sessionContext);
+    } catch (err) {
+      showTypingIndicator(false);
+      console.error("Error executing quick action:", err);
+      addMessageBubble("Aiyo 😅 I ran into a small error. Let's try again! 🌸", "nelum");
+    }
   }
 
   function sendTextMessage() {
@@ -786,142 +1433,100 @@ document.addEventListener("DOMContentLoaded", () => {
 
     showTypingIndicator(true);
 
-    // Keyword detection
-    setTimeout(() => {
+    manager.processMessage('default-session', text).then(reply => {
       showTypingIndicator(false);
-      const query = text.toLowerCase();
-      let reply = "";
       
-      if (query.includes("cake") || query.includes("gateau") || query.includes("bake")) {
-        filterShowcase("cakes");
-        reply = "Mmm, cakes! 🎂 I've loaded our fresh cakes on the right. The Signature Black Forest Gateau (Rs. 4,800) is prepared daily in our sterile Kapruka baking kitchens. We can add custom text on top of the cake for free! Would you like me to add it to your gift bundle?";
-      } else if (query.includes("flower") || query.includes("rose") || query.includes("lily") || query.includes("bouquet")) {
-        filterShowcase("flowers");
-        reply = "Flowers are perfect for conveying emotion! 💐 I've shown our fresh rose bouquets and serene white lilies on the right. They are sourced directly from Nuwara Eliya flower farms. Shall I add a bouquet to your selection?";
-      } else if (query.includes("chocolate") || query.includes("ferrero") || query.includes("lindt")) {
-        filterShowcase("chocolates");
-        reply = "Indulge in sweet surprises! 🍫 I have loaded our premium imported chocolate boxes and presentation hampers on the right. Perfect for anniversaries or birthdays. Let me know if you would like to pair it with flowers!";
-      } else if (query.includes("grocery") || query.includes("tea") || query.includes("fruit")) {
-        filterShowcase("groceries");
-        reply = "Groceries and organic products are wonderful practical gifts! 🛒 I have filtered for Ceylon Premium Tea, Organic Tropical Fruit Baskets, and general hampers on the right. These are highly appreciated for family visits.";
-      } else if (query.includes("electronics") || query.includes("playstation") || query.includes("ps5") || query.includes("console")) {
-        filterShowcase("electronics");
-        reply = "High-tech surprises! 🎮 I've displayed the Sony PlayStation 5 Slim console (Rs. 185,000) in the showcase. It comes with a full 1-year Kapruka warranty and free courier delivery across Sri Lanka. Would you like to check the specs?";
-      } else if (query.includes("toy") || query.includes("teddy") || query.includes("kids")) {
-        filterShowcase("toys");
-        reply = "So adorable! 🧸 I have brought up our plush Deluxe Teddy Bear on the right. Soft, hypoallergenic, and wearing the cute red satin bow. It fits beautifully into a kid's birthday surprise pack!";
-      } else if (query.includes("birthday")) {
-        filterShowcase("birthday");
-        reply = "Let's plan a birthday surprise! 🎂 I have loaded celebration cakes, rose bouquets, teddies, and our bestseller **Birthday Delight Surprise Bundle** on the right. Shall we write a greeting card card message?";
-      } else if (query.includes("sorry") || query.includes("apolog")) {
-        filterShowcase("sorry");
-        reply = "Apologies are best sent with peaceful thoughts. 🌹 I have filtered white lilies and comforting chocolates on the right. The **Sincere Apologies Sympathy Set** includes a customized handwritten apology card. Do you want to type the message?";
-      } else if (query.includes("anniversary") || query.includes("love")) {
-        filterShowcase("anniversary");
-        reply = "Milestones of love! 💝 I have loaded the romantic red roses, Ceylon tea, and chocolates. The **Golden Anniversary Celebration Bundle** is highly recommended. Shall we add same-day delivery to Colombo?";
-      } else if (query.includes("delivery") || query.includes("same day") || query.includes("today")) {
-        const filtered = NELUM_PRODUCTS.filter(p => p.deliveryEstimate.toLowerCase().includes("today") || p.deliveryEstimate.toLowerCase().includes("hour"));
-        renderProducts(filtered);
-        renderBundles(NELUM_BUNDLES.filter(b => b.deliveryEstimate.toLowerCase().includes("today")));
-        showcaseTitle.textContent = "Same-Day Surprises";
-        showcaseTag.textContent = "Fast Courier";
-        reply = "I've filtered the product list to show items that support same-day dispatch and delivery to Colombo. If you order now, Nelum will have it delivered in under 3 hours! 🚗";
-      } else if (query.includes("price") || query.includes("cheap") || query.includes("cost") || query.includes("budget")) {
-        const filtered = NELUM_PRODUCTS.filter(p => p.price < 5000);
-        renderProducts(filtered);
-        renderBundles([]);
-        showcaseTitle.textContent = "Budget Gift Surprises";
-        showcaseTag.textContent = "Under Rs. 5,000";
-        reply = "I've filtered our catalog to show gifts under Rs. 5,000. These include premium chocolate hampers, teddy bears, and fresh Ceylon tea box options. 🌸";
-      } else {
-        filterShowcase("all");
-        reply = "I'd love to help you find the perfect gift! 🌸 Tell me who you are shopping for (e.g. For Mom, For Dad, Gifts for Wife) or the item type you want (e.g. cakes, fresh flowers, PS5 console, chocolates).";
-      }
-
-      addMessageBubble(reply, "nelum");
-    }, 1500);
+      memoryStore.loadSession('default-session').then(context => {
+        if (context && context.cart) {
+          cart = context.cart.items;
+          updateCartUI();
+        }
+        fetchAndAddNelumMessage(reply, context);
+      });
+    }).catch(err => {
+      showTypingIndicator(false);
+      addMessageBubble("Aiyo 😅 I ran into a small error. Let's try again! 🌸", "nelum");
+    });
   }
 
-  function filterShowcase(category) {
-    currentCategory = category;
-    
-    if (category === "all") {
-      renderProducts(NELUM_PRODUCTS);
-      renderBundles(NELUM_BUNDLES);
-      showcaseTitle.textContent = "Popular Gifts";
-      showcaseTag.textContent = "General Store";
-    } else if (category === "birthday") {
-      const filtered = NELUM_PRODUCTS.filter(p => ["cakes", "flowers", "toys"].includes(p.category));
-      const bundles = NELUM_BUNDLES.filter(b => b.category === "birthday");
-      renderProducts(filtered);
-      renderBundles(bundles);
-      showcaseTitle.textContent = "Birthday Surprises";
-      showcaseTag.textContent = "Celebration";
-    } else if (category === "sorry") {
-      const filtered = NELUM_PRODUCTS.filter(p => ["flowers", "chocolates"].includes(p.category));
-      const bundles = NELUM_BUNDLES.filter(b => b.category === "sorry");
-      renderProducts(filtered);
-      renderBundles(bundles);
-      showcaseTitle.textContent = "Apology & Sympathy Gifts";
-      showcaseTag.textContent = "Empathetic";
-    } else if (category === "anniversary") {
-      const filtered = NELUM_PRODUCTS.filter(p => ["flowers", "chocolates", "groceries"].includes(p.category));
-      const bundles = NELUM_BUNDLES.filter(b => b.category === "anniversary");
-      renderProducts(filtered);
-      renderBundles(bundles);
-      showcaseTitle.textContent = "Anniversary Celebrations";
-      showcaseTag.textContent = "Love & Milestones";
-    } else if (category === "mom") {
-      const filtered = NELUM_PRODUCTS.filter(p => ["flowers", "chocolates", "groceries"].includes(p.category));
-      renderProducts(filtered);
-      renderBundles(NELUM_BUNDLES.slice(1));
-      showcaseTitle.textContent = "Gifts for Mom";
-      showcaseTag.textContent = "Amma";
-    } else if (category === "dad") {
-      const filtered = NELUM_PRODUCTS.filter(p => ["groceries", "electronics"].includes(p.category));
-      renderProducts(filtered);
-      renderBundles([]);
-      showcaseTitle.textContent = "Gifts for Dad";
-      showcaseTag.textContent = "Thaththa";
-    } else {
-      // Direct category filter
-      const filtered = NELUM_PRODUCTS.filter(p => p.category === category);
-      const bundles = NELUM_BUNDLES.filter(b => b.category === category);
-      renderProducts(filtered);
-      renderBundles(bundles);
-      
-      const categoryNames = {
-        cakes: "Freshly Baked Cakes",
-        flowers: "Fresh Flower Bouquets",
-        chocolates: "Luxury Chocolates",
-        groceries: "Premium Ceylon Tea & Groceries",
-        electronics: "Electronics & Gaming consoles",
-        toys: "Toys & Cuddly Plushies"
-      };
-      
-      showcaseTitle.textContent = categoryNames[category] || `${category.charAt(0).toUpperCase() + category.slice(1)} Gifts`;
-      showcaseTag.textContent = category.charAt(0).toUpperCase() + category.slice(1);
-    }
-
-    // Scroll right column to top
-    document.getElementById("showcase-section").scrollTop = 0;
-  }
-
-  function addMessageBubble(text, sender) {
+  function addMessageBubble(text, sender, productsList = null, bundlesList = null) {
     const bubble = document.createElement("div");
     bubble.classList.add("message-bubble", sender);
     
     if (sender === "nelum") {
-      // Support for clean lists and rich bold text references in Nelum replies
       const htmlText = text
         .replace(/\n\n/g, "<br><br>")
         .replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>");
         
-      bubble.innerHTML = `
+      let contentHtml = `
         <div class="nelum-rich-content">
           <p>${htmlText}</p>
         </div>
       `;
+
+      if (productsList && productsList.length > 0) {
+        contentHtml += `
+          <div class="chat-products-grid">
+            ${productsList.map(product => `
+              <div class="chat-product-card" data-id="${product.id}">
+                ${product.badge ? `<span class="card-badge">${product.badge}</span>` : ""}
+                <div class="chat-card-image-box">
+                  <img class="chat-card-image" src="${product.image}" alt="${product.title}" loading="lazy">
+                </div>
+                <div class="chat-card-info">
+                  <h4 class="chat-card-title">${product.title}</h4>
+                  <div class="chat-card-delivery-est">
+                    <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2">
+                      <circle cx="12" cy="12" r="10"></circle>
+                      <polyline points="12 6 12 12 16 14"></polyline>
+                    </svg>
+                    <span>${product.deliveryEstimate || 'Today'}</span>
+                  </div>
+                  <div class="chat-card-action-row">
+                    <span class="chat-card-price">Rs. ${(product.price || 0).toLocaleString()}</span>
+                    <div class="chat-card-buttons">
+                      <button class="chat-card-details-btn" data-id="${product.id}">Details</button>
+                      <button class="chat-card-add-btn" data-id="${product.id}" aria-label="Add item">Add</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            `).join("")}
+          </div>
+        `;
+      }
+
+      if (bundlesList && bundlesList.length > 0) {
+        contentHtml += `
+          <div class="chat-bundles-title">Recommended Surprise Gift Packages</div>
+          <div class="chat-bundles-carousel">
+            ${bundlesList.map(bundle => `
+              <div class="chat-bundle-card" data-id="${bundle.id}">
+                ${bundle.badge ? `<span class="bundle-badge">${bundle.badge}</span>` : ""}
+                <div class="chat-bundle-image-box">
+                  <img class="chat-bundle-image" src="${bundle.image}" alt="${bundle.title}">
+                </div>
+                <div class="chat-bundle-info">
+                  <h4 class="chat-bundle-title">${bundle.title}</h4>
+                  <p class="chat-bundle-desc">${bundle.description}</p>
+                  <ul class="chat-bundle-items">
+                    ${bundle.items.map(item => `<li>${item}</li>`).join("")}
+                  </ul>
+                  <div class="chat-bundle-footer">
+                    <div class="chat-bundle-price-box">
+                      <span class="chat-bundle-original">Rs. ${bundle.originalPrice.toLocaleString()}</span>
+                      <span class="chat-bundle-price">Rs. ${bundle.price.toLocaleString()}</span>
+                    </div>
+                    <button class="chat-btn-bundle-add" data-id="${bundle.id}">Add Bundle</button>
+                  </div>
+                </div>
+              </div>
+            `).join("")}
+          </div>
+        `;
+      }
+
+      bubble.innerHTML = contentHtml;
     } else {
       bubble.textContent = text;
     }
@@ -938,9 +1543,7 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   // --- Utility Functions ---
-
   function showToast(message) {
-    // Check if toast already exists
     let toast = document.querySelector(".nelum-toast");
     if (toast) toast.remove();
 
@@ -948,7 +1551,6 @@ document.addEventListener("DOMContentLoaded", () => {
     toast.className = "nelum-toast";
     toast.textContent = message;
     
-    // Quick inline styling for the premium toast feedback
     Object.assign(toast.style, {
       position: "fixed",
       bottom: "80px",
@@ -969,13 +1571,11 @@ document.addEventListener("DOMContentLoaded", () => {
 
     document.body.appendChild(toast);
     
-    // Trigger animation
     setTimeout(() => {
       toast.style.opacity = "1";
       toast.style.transform = "translateX(-50%) translateY(0)";
     }, 50);
 
-    // Remove toast
     setTimeout(() => {
       toast.style.opacity = "0";
       toast.style.transform = "translateX(-50%) translateY(20px)";
@@ -983,12 +1583,11 @@ document.addEventListener("DOMContentLoaded", () => {
     }, 3500);
   }
 
-  // Auto-grow chat textarea input
   chatInput.addEventListener("input", function() {
     this.style.height = "auto";
     this.style.height = (this.scrollHeight - 16) + "px";
   });
 
-  // Launch initial execution
-  init();
+  const appInitPromise = init();
+  runLoadingScreen(appInitPromise);
 });

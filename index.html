@@ -17,6 +17,46 @@
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
+  <!-- Premium Full-Screen Loading Experience -->
+  <div id="loading-screen" class="loading-screen-overlay" aria-busy="true" aria-live="polite">
+    <video id="loading-video" class="loading-video-bg" autoplay muted loop playsinline preload="auto">
+      <source src="assets/loading-video.mp4" type="video/mp4">
+    </video>
+    
+    <div class="loading-brand-container">
+      <div class="loading-logo-wrapper">
+        <!-- Stylized Premium Lotus Logo SVG -->
+        <svg class="loading-logo" viewBox="0 0 100 100" width="80" height="80" aria-hidden="true">
+          <defs>
+            <linearGradient id="lotusGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stop-color="#FF9EAD" />
+              <stop offset="50%" stop-color="#FF5E7E" />
+              <stop offset="100%" stop-color="#4B2E83" />
+            </linearGradient>
+            <linearGradient id="goldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stop-color="#FFF3A7" />
+              <stop offset="100%" stop-color="#F4D300" />
+            </linearGradient>
+          </defs>
+          <path d="M50 15 C55 35 65 45 50 85 C35 45 45 35 50 15 Z" fill="url(#lotusGrad)" />
+          <path d="M50 35 C35 40 25 55 30 75 C42 75 45 60 50 35 Z" fill="url(#lotusGrad)" opacity="0.85" />
+          <path d="M50 45 C20 50 15 65 20 80 C32 75 40 68 50 45 Z" fill="url(#lotusGrad)" opacity="0.7" />
+          <path d="M50 35 C65 40 75 55 70 75 C58 75 55 60 50 35 Z" fill="url(#lotusGrad)" opacity="0.85" />
+          <path d="M50 45 C80 50 85 65 80 80 C68 75 60 68 50 45 Z" fill="url(#lotusGrad)" opacity="0.7" />
+          <path d="M35 80 Q50 65 65 80 Q50 90 35 80 Z" fill="url(#goldGrad)" />
+        </svg>
+      </div>
+      
+      <h1 class="loading-title">Nelum AI</h1>
+      <p class="loading-subtitle">Sri Lanka's Shopping Companion</p>
+      
+      <!-- Premium Animated Progress Bar -->
+      <div class="loading-progress-container">
+        <div class="loading-progress-bar" id="loading-progress-fill" role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"></div>
+      </div>
+    </div>
+  </div>
+
   <!-- Ambient Floating Background Gradients -->
   <div class="ambient-gradient-mesh" aria-hidden="true">
     <div class="blob blob-purple"></div>
@@ -25,7 +65,8 @@
 
   <div class="app-container">
     <!-- Main App Header -->
-    <header class="app-header">
+    <!-- TOP STICKY NAVIGATION BAR -->
+    <header class="app-header sticky-header">
       <div class="header-logo-container">
         <!-- Kapruka Brand Logo SVG (Official Styling) -->
         <svg class="kapruka-logo" viewBox="0 0 100 40" width="100" height="40" aria-label="Kapruka Logo">
@@ -42,13 +83,29 @@
       </div>
       
       <div class="header-actions">
-        <!-- Notification Center -->
-        <button class="icon-button" id="btn-notifications" aria-label="View notifications">
+        <!-- Language Switcher -->
+        <div class="lang-switcher" aria-label="Language Selector">
+          <button class="lang-btn active" data-lang="en">EN</button>
+          <button class="lang-btn" data-lang="si">සිං</button>
+          <button class="lang-btn" data-lang="ta">தமி</button>
+        </div>
+
+        <!-- Track Orders button -->
+        <button class="icon-button" id="btn-track-orders-nav" title="Track Orders" aria-label="Track Orders">
           <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
-            <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
+            <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
+            <circle cx="12" cy="10" r="3"></circle>
           </svg>
         </button>
+
+        <!-- User Profile button -->
+        <button class="icon-button" id="btn-user-profile-nav" title="User Profile" aria-label="User Profile">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+            <circle cx="12" cy="7" r="4"></circle>
+          </svg>
+        </button>
+
         <!-- Floating Cart Trigger -->
         <button class="cart-trigger" id="btn-cart-toggle" aria-label="Open shopping cart">
           <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -61,10 +118,38 @@
       </div>
     </header>
 
-    <!-- Main Workspace (Split Pane Layout) -->
+    <!-- SECONDARY NAVIGATION BAR (not sticky, scroll hidden) -->
+    <nav class="secondary-nav-bar" id="secondary-nav">
+      <button class="sec-nav-btn active" data-action="shop">🛍️ Shop</button>
+      <button class="sec-nav-btn" data-action="rush">⚡ Rush Delivery</button>
+      <button class="sec-nav-btn" data-action="sale">🏷️ On Sale</button>
+      <button class="sec-nav-btn" data-action="events">📅 Events</button>
+      <button class="sec-nav-btn" data-action="brands">✨ Brands</button>
+      <button class="sec-nav-btn" data-action="foryou">👤 For You</button>
+    </nav>
+
+    <!-- Main Workspace (Sidebar + Center Chat Layout) -->
     <main class="main-content">
       
-      <!-- LEFT SIDE: Conversational Interface -->
+      <!-- Conversational Discovery Sidebar -->
+      <aside class="discovery-sidebar" id="categories-sidebar">
+        <h3 class="sidebar-title">Categories</h3>
+        <ul class="sidebar-menu">
+          <li data-category="cakes"><span class="menu-icon">🍰</span> Cakes</li>
+          <li data-category="flowers"><span class="menu-icon">💐</span> Flowers</li>
+          <li data-category="chocolates"><span class="menu-icon">🍫</span> Chocolates</li>
+          <li data-category="clothing"><span class="menu-icon">👕</span> Clothing</li>
+          <li data-category="electronics"><span class="menu-icon">🎮</span> Electronics</li>
+          <li data-category="food"><span class="menu-icon">🍔</span> Food</li>
+          <li data-category="grocery"><span class="menu-icon">🛒</span> Grocery</li>
+          <li data-category="toys"><span class="menu-icon">🧸</span> Toys</li>
+          <li data-category="fashion"><span class="menu-icon">👗</span> Fashion</li>
+          <li data-category="fruit_baskets"><span class="menu-icon">🧺</span> Fruit Baskets</li>
+          <li data-category="gift_packs"><span class="menu-icon">🎁</span> Gift Packs</li>
+        </ul>
+      </aside>
+
+      <!-- CENTER CHAT CONVERSATION AREA -->
       <section class="left-pane" id="chat-section">
         <!-- Welcoming Hero Area (Shown on Landing) -->
         <div class="chat-hero-area" id="chat-hero">
@@ -141,40 +226,6 @@
                 <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
               </svg>
             </button>
-          </div>
-        </div>
-      </section>
-
-      <!-- RIGHT SIDE: Product Showcase Panel -->
-      <section class="right-pane" id="showcase-section">
-        <div class="showcase-header">
-          <div class="showcase-title-area">
-            <span class="showcase-context-tag" id="showcase-tag">General Store</span>
-            <h2 class="showcase-title" id="showcase-title">Popular Gifts</h2>
-          </div>
-          <div class="delivery-highlight-banner">
-            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="#4B2E83" stroke-width="2">
-              <rect x="1" y="3" width="15" height="13"></rect>
-              <polygon points="16 8 20 8 23 11 23 16 16 16 16 8"></polygon>
-              <circle cx="5.5" cy="18.5" r="2.5"></circle>
-              <circle cx="18.5" cy="18.5" r="2.5"></circle>
-            </svg>
-            <span>Same-Day Delivery Available in Colombo</span>
-          </div>
-        </div>
-
-        <!-- Product Cards Showcase Grid -->
-        <div class="showcase-grid-wrapper">
-          <div class="showcase-grid" id="product-grid">
-            <!-- Product Cards render dynamically here -->
-          </div>
-        </div>
-
-        <!-- Smart Gift Bundles Section -->
-        <div class="bundles-section" id="bundles-area">
-          <h3 class="section-heading">🌸 Popular Gift Bundles</h3>
-          <div class="bundles-carousel" id="bundles-carousel">
-            <!-- Bundle Cards render dynamically here -->
           </div>
         </div>
       </section>
@@ -503,6 +554,12 @@
               <div class="detail-label">Time Window:</div>
               <div class="detail-value" id="track-delivery-time">Morning (8 AM - 12 PM)</div>
             </div>
+
+            <!-- Payment Pending Call To Action -->
+            <div class="payment-pending-box" id="track-payment-box" style="display: none; margin-top: 15px; margin-bottom: 15px; padding: 12px; background: rgba(244, 211, 0, 0.1); border: 1px solid rgba(244, 211, 0, 0.3); border-radius: 8px; text-align: center;">
+              <p style="font-size: 11px; margin-top: 0; margin-bottom: 8px; font-weight: bold; color: #4B2E83; font-family: 'Plus Jakarta Sans', sans-serif;">Payment is required to process delivery.</p>
+              <a href="#" id="btn-pay-now" target="_blank" class="btn-primary-delivery" style="display: inline-block; text-decoration: none; width: auto; padding: 6px 12px; font-size: 11px; font-weight: 700; border-radius: 20px; text-align: center; background: #F4D300; color: #4B2E83; font-family: 'Plus Jakarta Sans', sans-serif; transition: transform 0.2s;">Secure Card Payment ➔</a>
+            </div>
             
             <div class="helper-chat-cta">
               <p>Want to change delivery notes or ask questions about the order?</p>
@@ -515,7 +572,6 @@
   </div>
 
   <!-- Javascript Scripts -->
-  <script src="mockData.js"></script>
-  <script src="app.js"></script>
+  <script type="module" src="app.js"></script>
 </body>
 </html>
