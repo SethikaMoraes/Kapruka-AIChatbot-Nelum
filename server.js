@@ -11,7 +11,9 @@ import {
   generateGiftSuggestions, 
   generateUpsellSuggestions, 
   summarizeCart, 
-  detectIntentWithLLM 
+  detectIntentWithLLM,
+  analyzeConversationTurn,
+  generateVoice
 } from './src/ai/geminiClient.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -631,6 +633,33 @@ app.post('/api/ai/detect-intent', async (req, res) => {
     res.json({ response });
   } catch (err) {
     console.error(`[AI Proxy] detectIntentWithLLM error:`, err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 7. Unified Conversation Analysis
+app.post('/api/ai/analyze-turn', async (req, res) => {
+  const { userInput, context } = req.body;
+  try {
+    const response = await analyzeConversationTurn(userInput, context);
+    res.json({ response });
+  } catch (err) {
+    console.error(`[AI Proxy] analyzeConversationTurn error:`, err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 8. Voice synthesis endpoint
+app.post('/api/voice/synthesize', async (req, res) => {
+  const { text, voice } = req.body;
+  if (typeof text !== 'string' || !text.trim()) {
+    return res.status(400).json({ error: 'text must be a non-empty string' });
+  }
+  try {
+    const result = await generateVoice(text, voice || 'Aoede');
+    res.json(result);
+  } catch (err) {
+    console.error(`[AI Proxy] voice synthesis error:`, err.message);
     res.status(500).json({ error: err.message });
   }
 });

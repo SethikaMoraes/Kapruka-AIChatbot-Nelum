@@ -296,3 +296,111 @@ Classify the user's shopping intent, extract entities, and identify their langua
     return JSON.parse(response.text);
   });
 }
+
+/**
+ * 7. Unified Conversation Turn Analysis
+ */
+export async function analyzeConversationTurn(userInput, context) {
+  if (!isNode) {
+    const res = await fetch('/api/ai/analyze-turn', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userInput, context })
+    });
+    if (!res.ok) throw new Error('Failed to analyze turn from Gemini proxy');
+    const data = await res.json();
+    return data.response;
+  }
+
+  const prompt = `User Input: "${userInput}"
+Current Conversation Context/Memory:
+${JSON.stringify(context.conversationMemory || {}, null, 2)}
+
+Analyze this input message for:
+1. Primary language (en, si, ta, or mix)
+2. User emotion (Caring, Excited, Unsure, Grateful, Frustrated, Apologetic, or Neutral)
+3. Occasion (e.g. Birthday, Anniversary, Apology, Avurudu, or null)
+4. Relationship to recipient (e.g. Mother, Father, Partner, Friend, Child, or null)
+5. Recipient's name (if mentioned, e.g. "Priyantha", or null)
+6. Delivery City (if mentioned, or null)
+7. Delivery Date (if mentioned, or null)
+8. Budget (if mentioned, or null)
+9. Preferences/Interests mentioned (e.g. "gardening", "chocolates" - return as array of strings)
+10. Confidence score of this analysis (between 0.0 and 1.0)`;
+
+  return callGeminiWithRetry(async () => {
+    const ai = await getGeminiClient();
+    const response = await ai.models.generateContent({
+      model: process.env.GEMINI_MODEL || 'gemini-2.5-flash',
+      contents: prompt,
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: 'object',
+          properties: {
+            language: { type: 'string', enum: ['en', 'si', 'ta', 'mix'] },
+            emotion: { type: 'string', enum: ['Caring', 'Excited', 'Unsure', 'Grateful', 'Frustrated', 'Apologetic', 'Neutral'] },
+            occasion: { type: 'string', nullable: true },
+            relationship: { type: 'string', nullable: true },
+            recipientName: { type: 'string', nullable: true },
+            deliveryCity: { type: 'string', nullable: true },
+            deliveryDate: { type: 'string', nullable: true },
+            budget: { type: 'number', nullable: true },
+            preferences: {
+              type: 'array',
+              items: { type: 'string' }
+            },
+            confidence: { type: 'number' }
+          },
+          required: ['language', 'emotion', 'confidence']
+        }
+      }
+    });
+    return JSON.parse(response.text);
+  });
+}
+
+/**
+ * 8. Text-to-Speech audio generation using Gemini API audio modality
+ * @param {string} text
+ * @param {string} voiceName
+ * @returns {Promise<{audioContent: string, mimeType: string}>} base64 encoded audio
+ */
+export async function generateVoice(text, voiceName = 'Aoede') {
+  if (!isNode) {
+    throw new Error('generateVoice is Node-only');
+  }
+
+  return callGeminiWithRetry(async () => {
+    const ai = await getGeminiClient();
+    const model = process.env.GEMINI_VOICE_MODEL || 'gemini-2.0-flash';
+    
+    console.log(`[Gemini Client] Generating voice using model="${model}" and voiceName="${voiceName}"...`);
+    const response = await ai.models.generateContent({
+      model: model,
+      contents: text,
+      config: {
+        responseModalities: ['AUDIO'],
+        speechConfig: {
+          voiceConfig: {
+            prebuiltVoiceConfig: {
+              voiceName: voiceName
+            }
+          }
+        }
+      }
+    });
+
+    const candidate = response.candidates && response.candidates[0];
+    const part = candidate && candidate.content && candidate.content.parts && candidate.content.parts[0];
+    if (part && part.inlineData) {
+      return {
+        audioContent: part.inlineData.data,
+        mimeType: part.inlineData.mimeType
+      };
+    }
+    throw new Error('No audio returned from Gemini API generateContent');
+  });
+}
+
+

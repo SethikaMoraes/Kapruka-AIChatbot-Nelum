@@ -11,6 +11,14 @@ export class KaprukaClient {
     console.log('[KaprukaClient] Refactored client loaded. All MCP requests now routed through backend proxy.');
   }
 
+  _getUrl(path) {
+    if (typeof window === 'undefined') {
+      const port = process.env.PORT || 8000;
+      return `http://localhost:${port}${path}`;
+    }
+    return path;
+  }
+
   /**
    * 1. Search products in the catalog
    */
@@ -20,7 +28,7 @@ export class KaprukaClient {
     }
 
     try {
-      const res = await fetch('/api/products/search', {
+      const res = await fetch(this._getUrl('/api/products/search'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -54,7 +62,7 @@ export class KaprukaClient {
     }
 
     try {
-      const res = await fetch('/api/products/details', {
+      const res = await fetch(this._getUrl('/api/products/details'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -82,7 +90,7 @@ export class KaprukaClient {
    */
   async listCategories() {
     try {
-      const res = await fetch('/api/categories');
+      const res = await fetch(this._getUrl('/api/categories'));
       if (!res.ok) {
         const errorData = await res.json().catch(() => ({}));
         throw new McpError(errorData.error || `HTTP ${res.status} error listing categories`);
@@ -100,7 +108,7 @@ export class KaprukaClient {
    */
   async listDeliveryCities(query = 'colombo') {
     try {
-      const res = await fetch(`/api/delivery/cities?q=${encodeURIComponent(query)}`);
+      const res = await fetch(this._getUrl(`/api/delivery/cities?q=${encodeURIComponent(query)}`));
       if (!res.ok) {
         const errorData = await res.json().catch(() => ({}));
         throw new McpError(errorData.error || `HTTP ${res.status} error listing cities`);
@@ -118,7 +126,7 @@ export class KaprukaClient {
    */
   async checkDelivery(city, deliveryDate, productId) {
     try {
-      const res = await fetch('/api/delivery/check', {
+      const res = await fetch(this._getUrl('/api/delivery/check'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -168,7 +176,7 @@ export class KaprukaClient {
         name: sender.name || 'Sender Name'
       };
 
-      const res = await fetch('/api/orders/create', {
+      const res = await fetch(this._getUrl('/api/orders/create'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -201,7 +209,7 @@ export class KaprukaClient {
    */
   async trackOrder(orderId) {
     try {
-      const res = await fetch('/api/orders/track', {
+      const res = await fetch(this._getUrl('/api/orders/track'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'

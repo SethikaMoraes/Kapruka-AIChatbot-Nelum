@@ -77,6 +77,20 @@ class EventBus {
     this.listeners.clear();
     console.log('[EventBus] Cleared all listeners.');
   }
+
+  /**
+   * Alias for subscribe to match EventEmitter API
+   */
+  on(eventName, callback) {
+    return this.subscribe(eventName, callback);
+  }
+
+  /**
+   * Alias for publish to match EventEmitter API
+   */
+  emit(eventName, payload) {
+    this.publish(eventName, payload);
+  }
 }
 
 export const eventBus = new EventBus();

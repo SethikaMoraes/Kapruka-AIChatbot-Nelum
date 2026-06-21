@@ -304,6 +304,61 @@ export class GoodbyeState extends BaseState {
   }
 }
 
+// New Companion Engine States
+export class GreetingState extends BaseState {
+  constructor() {
+    super('GREETING');
+  }
+}
+
+export class RelationshipDiscoveryState extends BaseState {
+  constructor() {
+    super('RELATIONSHIP_DISCOVERY');
+  }
+}
+
+export class OccasionDiscoveryState extends BaseState {
+  constructor() {
+    super('OCCASION_DISCOVERY');
+  }
+}
+
+export class BudgetDiscoveryState extends BaseState {
+  constructor() {
+    super('BUDGET_DISCOVERY');
+  }
+}
+
+export class PreferenceDiscoveryState extends BaseState {
+  constructor() {
+    super('PREFERENCE_DISCOVERY');
+  }
+}
+
+export class RecommendationState extends BaseState {
+  constructor() {
+    super('RECOMMENDATION');
+  }
+}
+
+export class ComparisonState extends BaseState {
+  constructor() {
+    super('COMPARISON');
+  }
+}
+
+export class DeliveryState extends BaseState {
+  constructor() {
+    super('DELIVERY');
+  }
+}
+
+export class TrackingState extends BaseState {
+  constructor() {
+    super('TRACKING');
+  }
+}
+
 /**
  * Registry of all available States in the system
  */
@@ -325,6 +380,17 @@ export class StateMachineRegistry {
     this.states.set('ORDER_TRACKING', new OrderTrackingState());
     this.states.set('POST_PURCHASE', new PostPurchaseState());
     this.states.set('GOODBYE', new GoodbyeState());
+
+    // Register companion states
+    this.states.set('GREETING', new GreetingState());
+    this.states.set('RELATIONSHIP_DISCOVERY', new RelationshipDiscoveryState());
+    this.states.set('OCCASION_DISCOVERY', new OccasionDiscoveryState());
+    this.states.set('BUDGET_DISCOVERY', new BudgetDiscoveryState());
+    this.states.set('PREFERENCE_DISCOVERY', new PreferenceDiscoveryState());
+    this.states.set('RECOMMENDATION', new RecommendationState());
+    this.states.set('COMPARISON', new ComparisonState());
+    this.states.set('DELIVERY', new DeliveryState());
+    this.states.set('TRACKING', new TrackingState());
   }
 
   registerState(stateInstance) {

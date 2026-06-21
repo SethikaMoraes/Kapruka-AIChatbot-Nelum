@@ -10,6 +10,7 @@ import { eventBus } from './src/utils/eventBus.js';
 import { kaprukaClient } from './src/mcp/kaprukaClient.js';
 import { preferenceEngine } from './src/memory/preferenceEngine.js';
 import { habitLearningEngine } from './src/memory/habitLearningEngine.js';
+import { voiceController } from './src/voice/voiceController.js';
 
 document.addEventListener("DOMContentLoaded", () => {
   // --- Instantiate Conversation Manager ---
@@ -54,8 +55,8 @@ document.addEventListener("DOMContentLoaded", () => {
   
   const chatHero = document.getElementById("chat-hero");
   const chatMessages = document.getElementById("chat-messages");
-  const chatInput = document.getElementById("chat-input");
-  const btnSend = document.getElementById("btn-send");
+  const chatInput = document.getElementById("chatInput");
+  const btnSend = document.getElementById("sendBtn");
   const btnVoice = document.getElementById("btn-voice");
   const btnVoiceCancel = document.getElementById("btn-voice-cancel");
   const voiceWave = document.getElementById("voice-wave");
@@ -221,6 +222,17 @@ document.addEventListener("DOMContentLoaded", () => {
     
     setupEventListeners();
     
+    // Initialize Voice Subsytem
+    voiceController.initialize(manager, chatInput, sendTextMessage);
+    
+    // Sync live transcript to chat-input field
+    eventBus.on('voice:transcript', payload => {
+      const chatInput = document.getElementById('chatInput');
+      if (!chatInput) return;
+      chatInput.value = payload.text;
+      chatInput.dispatchEvent(new Event('input'));
+    });
+    
     // Set default date in delivery form to tomorrow
     const tomorrow = new Date();
     tomorrow.setDate(tomorrow.getDate() + 1);
@@ -362,6 +374,19 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // --- Conversational Helpers & Inline Catalog Fetching ---
   async function fetchAndAddNelumMessage(replyText, context) {
+    const showProducts = ['RECOMMENDATION', 'COMPARISON', 'PRODUCT_SEARCH'].includes(context?.activeState);
+    if (!showProducts) {
+      addMessageBubble(replyText, "nelum");
+      return;
+    }
+
+    if (context?.recommendedProducts && context.recommendedProducts.length > 0) {
+      const displayProducts = context.recommendedProducts.slice(0, 6);
+      const dynamicBundles = generateDynamicBundles(displayProducts);
+      addMessageBubble(replyText, "nelum", displayProducts, dynamicBundles);
+      return;
+    }
+
     let category = "all";
     if (context && context.extractedEntities && context.extractedEntities.category) {
       category = context.extractedEntities.category;
@@ -870,8 +895,12 @@ document.addEventListener("DOMContentLoaded", () => {
     });
 
     // Voice button trigger
-    btnVoice.addEventListener("click", startVoiceSimulation);
-    btnVoiceCancel.addEventListener("click", stopVoiceSimulation);
+    btnVoice.addEventListener("click", () => {
+      voiceController.handleMicClick();
+    });
+    btnVoiceCancel.addEventListener("click", () => {
+      voiceController.interrupt();
+    });
 
     // Image attachment simulation
     btnAttach.addEventListener("click", () => {
@@ -1454,6 +1483,7 @@ document.addEventListener("DOMContentLoaded", () => {
     bubble.classList.add("message-bubble", sender);
     
     if (sender === "nelum") {
+      voiceController.speak(text);
       const htmlText = text
         .replace(/\n\n/g, "<br><br>")
         .replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>");
@@ -1544,6 +1574,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // --- Utility Functions ---
   function showToast(message) {
+    window.showToast = showToast;
     let toast = document.querySelector(".nelum-toast");
     if (toast) toast.remove();
 
