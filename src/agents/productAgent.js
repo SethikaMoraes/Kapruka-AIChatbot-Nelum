@@ -3,8 +3,8 @@
  * Interfaces with the Kapruka catalog tool to extract search matches and format results showcase.
  */
 
-import { kaprukaClient } from '../mcp/kaprukaClient.js';
-import { generateShoppingAdvice, generateResponse } from '../ai/geminiClient.js';
+import { kaprukaClient } from '../api/kaprukaClient.js';
+import { generateShoppingAdvice, generateResponse } from '../services/geminiClient.js';
 
 export class ProductAgent {
   constructor() {

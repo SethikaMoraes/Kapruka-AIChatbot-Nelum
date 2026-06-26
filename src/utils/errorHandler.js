@@ -1,3 +1,5 @@
+import { logger } from './logger.js';
+
 export class ValidationError extends Error {
   constructor(message) {
     super(message);
@@ -66,6 +68,18 @@ export function getUserFriendlyMessage(error) {
   return "Aiyo 😅 I ran into a small hiccup while picking your gifts. Let's try that again! 🌸";
 }
 
+/**
+ * Centralized error handler helper. Log errors and return user-friendly message.
+ * @param {Error} error 
+ * @param {string} [contextMessage] 
+ * @returns {string} User-friendly message
+ */
+export function handleError(error, contextMessage = '') {
+  const prefix = contextMessage ? `[${contextMessage}] ` : '';
+  logger.error(`${prefix}Error encountered:`, error);
+  return getUserFriendlyMessage(error);
+}
+
 export const errorHandler = {
   ValidationError,
   AgentTimeoutError,
@@ -73,7 +87,9 @@ export const errorHandler = {
   NetworkError,
   CheckoutError,
   TrackingError,
-  getUserFriendlyMessage
+  getUserFriendlyMessage,
+  handleError
 };
 
 export default errorHandler;
+

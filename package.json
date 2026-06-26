@@ -3,9 +3,9 @@
   "version": "1.0.0",
   "description": "Nelum AI Chatbot with Express backend proxy for Kapruka MCP",
   "type": "module",
-  "main": "server.js",
+  "main": "server/server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server/server.js"
   },
   "dependencies": {
     "@google/genai": "^2.8.0",

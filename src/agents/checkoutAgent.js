@@ -1,6 +1,6 @@
-import { kaprukaClient } from '../mcp/kaprukaClient.js';
+import { kaprukaClient } from '../api/kaprukaClient.js';
 import { checkoutEngine } from '../commerce/checkoutEngine.js';
-import { summarizeCart, generateResponse } from '../ai/geminiClient.js';
+import { summarizeCart, generateResponse } from '../services/geminiClient.js';
 
 export class CheckoutAgent {
   constructor() {

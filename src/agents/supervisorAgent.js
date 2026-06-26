@@ -7,8 +7,8 @@ import { languageProcessor } from '../localization/languageProcessor.js';
 import { decisionEngine } from '../recommendations/decisionEngine.js';
 import { preferenceEngine } from '../memory/preferenceEngine.js';
 import { memoryStore } from '../memory/memoryStore.js';
-import { kaprukaClient } from '../mcp/kaprukaClient.js';
-import { generateResponse } from '../ai/geminiClient.js';
+import { kaprukaClient } from '../api/kaprukaClient.js';
+import { generateResponse } from '../services/geminiClient.js';
 
 export class SupervisorAgent {
   constructor() {

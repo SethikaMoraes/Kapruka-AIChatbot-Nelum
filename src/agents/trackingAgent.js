@@ -1,5 +1,5 @@
-import { kaprukaClient } from '../mcp/kaprukaClient.js';
-import { generateResponse } from '../ai/geminiClient.js';
+import { kaprukaClient } from '../api/kaprukaClient.js';
+import { generateResponse } from '../services/geminiClient.js';
 
 export class TrackingAgent {
   constructor() {

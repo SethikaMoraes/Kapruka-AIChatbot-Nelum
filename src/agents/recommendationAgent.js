@@ -1,7 +1,7 @@
 import { recommendationEngine } from '../recommendations/recommendationEngine.js';
 import { bundleEngine } from '../recommendations/bundleEngine.js';
-import { kaprukaClient } from '../mcp/kaprukaClient.js';
-import { generateGiftSuggestions } from '../ai/geminiClient.js';
+import { kaprukaClient } from '../api/kaprukaClient.js';
+import { generateGiftSuggestions } from '../services/geminiClient.js';
 
 export class RecommendationAgent {
   constructor() {

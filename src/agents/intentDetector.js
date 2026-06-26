@@ -4,7 +4,7 @@
  */
 
 import { languageProcessor } from '../localization/languageProcessor.js';
-import { detectIntentWithLLM } from '../ai/geminiClient.js';
+import { detectIntentWithLLM } from '../services/geminiClient.js';
 
 export class IntentDetector {
   constructor() {

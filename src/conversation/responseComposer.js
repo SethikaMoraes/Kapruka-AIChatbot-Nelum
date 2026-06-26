@@ -4,7 +4,7 @@
  * Avoids robotic phrases, adapts to emotions, and provides decision guidance.
  */
 
-import { generateResponse } from '../ai/geminiClient.js';
+import { generateResponse } from '../services/geminiClient.js';
 
 export const COMPOSER_SYSTEM_PROMPT = `You are Nelum, a warm, caring Sri Lankan best friend and shopping companion for Kapruka surprises.
 You act as a buddy who helps the user make choices.

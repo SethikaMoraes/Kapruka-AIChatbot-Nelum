@@ -1,0 +1,37 @@
+/**
+ * Nelum AI Agent and State Machine Constants
+ */
+export const AGENT_NAMES = {
+  SUPERVISOR: 'Supervisor',
+  PRODUCT: 'Product',
+  DELIVERY: 'Delivery',
+  RECOMMENDATION: 'Recommendation',
+  CHECKOUT: 'Checkout',
+  TRACKING: 'Tracking'
+};
+
+export const CONVERSATIONAL_STATES = [
+  'WELCOME',
+  'DISCOVERY',
+  'GIFT_DISCOVERY',
+  'PRODUCT_SEARCH',
+  'GREETING',
+  'RELATIONSHIP_DISCOVERY',
+  'OCCASION_DISCOVERY',
+  'BUDGET_DISCOVERY',
+  'PREFERENCE_DISCOVERY',
+  'RECOMMENDATION',
+  'COMPARISON',
+  'POST_PURCHASE',
+  'GOODBYE'
+];
+
+export const AGENT_TIMEOUT_MS = 4500;
+export const AGENT_MAX_RETRIES = 2;
+
+export default {
+  AGENT_NAMES,
+  CONVERSATIONAL_STATES,
+  AGENT_TIMEOUT_MS,
+  AGENT_MAX_RETRIES
+};

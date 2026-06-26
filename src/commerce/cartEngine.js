@@ -3,7 +3,7 @@
  * Computes Cart Quality Index (CQI) to evaluate gift completeness and queries pairing upsells.
  */
 
-import { kaprukaClient } from '../mcp/kaprukaClient.js';
+import { kaprukaClient } from '../api/kaprukaClient.js';
 
 export class CartEngine {
   /**
